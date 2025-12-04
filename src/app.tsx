@@ -33,6 +33,11 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", ctrl: true, action: "newline" },
   { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
+  { name: "kpenter", action: "submit" },
+  { name: "kpenter", shift: true, action: "newline" },
+  { name: "kpenter", ctrl: true, action: "newline" },
+  { name: "kpenter", meta: true, action: "newline" },
+  { name: "kpenter", alt: true, action: "newline" },
   { name: "linefeed", action: "newline" }
 ];
 
