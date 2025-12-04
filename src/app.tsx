@@ -182,7 +182,7 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
     if (!scrollBox) {
       return;
     }
-    scrollBox.scrollTo({ y: scrollBox.scrollHeight });
+    scrollBox.scrollTo({ x: 0, y: scrollBox.scrollHeight });
   }, [scrollRef]);
 
   const isAtBottom = useCallback((box: ScrollBoxRenderable): boolean => {
@@ -196,7 +196,7 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
       if (!scrollBox) {
         return;
       }
-      scrollBox.scrollBy({ y: delta });
+      scrollBox.scrollTo({ x: 0, y: scrollBox.scrollTop + delta });
       if (delta < 0) {
         setAutoFollow(false);
         return;
@@ -278,14 +278,23 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
       </box>
       <scrollbox
         ref={props.scrollRef}
-        style={{ flexGrow: 1, border: true, padding: 0 }}
+        style={{
+          flexGrow: 1,
+          border: true,
+          paddingTop: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+          paddingRight: 0
+        }}
+        contentOptions={{ paddingLeft: 6, paddingRight: 0 }}
+        scrollX={false}
         stickyScroll={props.autoFollow}
         stickyStart="bottom"
         scrollY
         onMouse={props.onScroll}
         focused
       >
-        <box flexDirection="column" style={{ gap: 0, width: "100%", paddingLeft: 8, paddingRight: 2 }}>
+        <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
           {props.lines.map((line) => (
             <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
               [{line.role}] {line.text}
