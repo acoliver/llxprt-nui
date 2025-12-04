@@ -36,6 +36,8 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", ctrl: true, action: "newline" },
   { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
+  { name: "kpenter", action: "submit" },
+  { name: "kpplus", action: "submit" },
   { name: "linefeed", action: "newline" }
 ];
 
@@ -457,7 +459,9 @@ function useEnterSubmit(onSubmit: () => void): void {
       key.name === "return" ||
       key.name === "enter" ||
       key.name === "kpenter" ||
+      key.name === "kpplus" ||
       key.code === "[57415u" ||
+      key.code === "[57414u" ||
       key.sequence === "\r" ||
       key.sequence === "\n";
     if (isEnterLike) {
