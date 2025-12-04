@@ -33,11 +33,6 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", ctrl: true, action: "newline" },
   { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
-  { name: "kpenter", action: "submit" },
-  { name: "kpenter", shift: true, action: "newline" },
-  { name: "kpenter", ctrl: true, action: "newline" },
-  { name: "kpenter", meta: true, action: "newline" },
-  { name: "kpenter", alt: true, action: "newline" },
   { name: "linefeed", action: "newline" }
 ];
 
@@ -455,7 +450,14 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
 
 function useEnterSubmit(onSubmit: () => void): void {
   useKeyboard((key) => {
-    if (key.name === "return" || key.name === "enter" || key.name === "kpenter") {
+    const isEnterLike =
+      key.name === "return" ||
+      key.name === "enter" ||
+      key.name === "kpenter" ||
+      key.code === "[57415u" ||
+      key.sequence === "\r" ||
+      key.sequence === "\n";
+    if (isEnterLike) {
       const hasModifier = key.shift || key.ctrl || key.meta || key.option || key.super;
       if (!hasModifier) {
         key.preventDefault?.();
@@ -511,6 +513,11 @@ export function App(): JSX.Element {
     mountedRef
   );
 
+  const cancelStreaming = useCallback(() => {
+    streamRunId.current += 1;
+    setStreamState("idle");
+  }, [setStreamState]);
+
   const { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete } = useInputManager(
     textareaRef,
     appendLines,
@@ -557,6 +564,8 @@ export function App(): JSX.Element {
       if (choice) {
         handleTabComplete(choice);
       }
+    } else if (key.name === "escape") {
+      cancelStreaming();
     }
   });
 
