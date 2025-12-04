@@ -30,11 +30,9 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
   { name: "return", shift: true, action: "newline" },
   { name: "return", ctrl: true, action: "newline" },
+  { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
-  { name: "linefeed", action: "submit" },
-  { name: "linefeed", shift: true, action: "newline" },
-  { name: "linefeed", ctrl: true, action: "newline" },
-  { name: "linefeed", alt: true, action: "newline" }
+  { name: "linefeed", action: "newline" }
 ];
 
 const OPENERS = [
@@ -344,7 +342,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
 
 function useEnterSubmit(onSubmit: () => void): void {
   useKeyboard((key) => {
-    if (key.name === "return" || key.name === "linefeed" || key.name === "enter") {
+    if (key.name === "return" || key.name === "enter") {
       const hasModifier = key.shift || key.ctrl || key.meta || key.option || key.super;
       if (!hasModifier) {
         key.preventDefault?.();
