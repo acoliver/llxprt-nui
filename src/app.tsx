@@ -1,5 +1,7 @@
+import { appendFileSync } from "node:fs";
+import path from "node:path";
 import { randomInt } from "node:crypto";
-import type { KeyBinding, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
+import type { KeyBinding, KeyEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { Dispatch, JSX, RefObject, SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,6 +28,7 @@ const STREAM_MIN_LINES = 5;
 const STREAM_MAX_LINES = 800;
 const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
+const KEY_LOG_PATH = path.resolve(process.cwd(), "key-events.log");
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
@@ -458,6 +461,9 @@ function useEnterSubmit(onSubmit: () => void): void {
       key.sequence === "\r" ||
       key.sequence === "\n";
     if (isEnterLike) {
+      logEnterKey(key);
+    }
+    if (isEnterLike) {
       const hasModifier = key.shift || key.ctrl || key.meta || key.option || key.super;
       if (!hasModifier) {
         key.preventDefault?.();
@@ -465,6 +471,15 @@ function useEnterSubmit(onSubmit: () => void): void {
       }
     }
   });
+}
+
+function logEnterKey(key: KeyEvent): void {
+  try {
+    const line = `${new Date().toISOString()}|${key.name}|${key.code ?? ""}|${JSON.stringify(key)}\n`;
+    appendFileSync(KEY_LOG_PATH, line, "utf8");
+  } catch {
+    // ignore logging errors
+  }
 }
 
 export function App(): JSX.Element {

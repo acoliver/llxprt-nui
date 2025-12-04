@@ -7,3 +7,4 @@ dist/
 .env.*.local
 coverage/
 .nyc_output/
+key-events.log
