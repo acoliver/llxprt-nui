@@ -278,17 +278,18 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
       </box>
       <scrollbox
         ref={props.scrollRef}
-        style={{ flexGrow: 1, border: true, padding: 1, paddingLeft: 2 }}
+        style={{ flexGrow: 1, border: true, padding: 0 }}
+        contentOptions={{ paddingLeft: 1, paddingRight: 1 }}
         stickyScroll={props.autoFollow}
         stickyStart="bottom"
         scrollY
         onMouse={props.onScroll}
         focused
       >
-        <box flexDirection="column" style={{ gap: 0, paddingLeft: 3, width: "100%" }}>
+        <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
           {props.lines.map((line) => (
-            <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"} style={{ paddingLeft: 1 }}>
-              {" "}[{line.role}] {line.text}
+            <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
+              [{line.role}] {line.text}
             </text>
           ))}
         </box>
