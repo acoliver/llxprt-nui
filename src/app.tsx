@@ -286,7 +286,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           paddingLeft: 0,
           paddingRight: 0
         }}
-        contentOptions={{ paddingLeft: 6, paddingRight: 0 }}
+        contentOptions={{ paddingLeft: 3, paddingRight: 0 }}
         scrollX={false}
         stickyScroll={props.autoFollow}
         stickyStart="bottom"
