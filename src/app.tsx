@@ -482,6 +482,17 @@ function logEnterKey(key: KeyEvent): void {
   }
 }
 
+function logAnyKey(key: KeyEvent): void {
+  try {
+    const line = `${new Date().toISOString()}|${key.name}|${key.code ?? ""}|${key.sequence}|${key.raw}|${
+      key.source
+    }\n`;
+    appendFileSync(KEY_LOG_PATH, line, "utf8");
+  } catch {
+    // ignore logging errors
+  }
+}
+
 export function App(): JSX.Element {
   const scrollRef = useRef<ScrollBoxRenderable>(null);
   const textareaRef = useRef<TextareaRenderable>(null);
@@ -566,6 +577,11 @@ export function App(): JSX.Element {
   }, [autoFollow, streamState]);
 
   useEnterSubmit(handleSubmit);
+  useKeyboard((key) => {
+    if (key.eventType === "press") {
+      logAnyKey(key);
+    }
+  });
   useKeyboard((key) => {
     if (suggestions.length > 0 && key.name === "down") {
       key.preventDefault?.();
