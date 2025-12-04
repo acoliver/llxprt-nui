@@ -334,6 +334,18 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
   );
 }
 
+function useEnterSubmit(onSubmit: () => void): void {
+  useKeyboard((key) => {
+    if (key.name === "return" || key.name === "linefeed" || key.name === "enter") {
+      const hasModifier = key.shift || key.ctrl || key.meta || key.option || key.super;
+      if (!hasModifier) {
+        key.preventDefault?.();
+        onSubmit();
+      }
+    }
+  });
+}
+
 export function App(): JSX.Element {
   const scrollRef = useRef<ScrollBoxRenderable>(null);
   const textareaRef = useRef<TextareaRenderable>(null);
@@ -391,6 +403,8 @@ export function App(): JSX.Element {
     const scrollPart = autoFollow ? "follow" : "scroll lock";
     return `${streamingPart} | ${scrollPart}`;
   }, [autoFollow, streamState]);
+
+  useEnterSubmit(handleSubmit);
 
   return (
     <ChatLayout
