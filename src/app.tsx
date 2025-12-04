@@ -27,8 +27,11 @@ const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
-  { name: "return", meta: true, action: "submit" },
-  { name: "return", ctrl: true, action: "submit" }
+  { name: "return", action: "submit" },
+  { name: "return", shift: true, action: "newline" },
+  { name: "return", ctrl: true, action: "newline" },
+  { name: "return", meta: true, action: "newline" },
+  { name: "return", alt: true, action: "newline" }
 ];
 
 const OPENERS = [
@@ -271,7 +274,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
       </box>
       <scrollbox
         ref={props.scrollRef}
-        style={{ flexGrow: 1, border: true, padding: 1 }}
+        style={{ flexGrow: 1, border: true, padding: 1, paddingLeft: 2 }}
         stickyScroll={props.autoFollow}
         stickyStart="bottom"
         scrollY
@@ -287,24 +290,24 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
       </scrollbox>
       <box
         style={{
-          minHeight: 4,
-          maxHeight: MAX_INPUT_LINES + 4,
+          minHeight: 5,
+          maxHeight: MAX_INPUT_LINES + 6,
           border: true,
           padding: 1,
           flexDirection: "column",
           gap: 1
         }}
       >
-        <text fg="#a5b4fc">Input (Ctrl/Cmd+Enter to send)</text>
+        <text fg="#a5b4fc">Input (Enter to send; Shift/Opt/Ctrl/Meta+Enter for newline)</text>
         <textarea
           ref={props.textareaRef}
           focused
-          placeholder="Type a thought, then submit with Ctrl/Cmd+Enter"
+          placeholder="Type a thought, then submit with Enter"
           keyBindings={TEXTAREA_KEY_BINDINGS}
           onSubmit={props.handleSubmit}
           onContentChange={props.enforceInputLineBounds}
           wrapMode="word"
-          style={{ height: inputHeight, width: "100%", paddingLeft: 1 }}
+          style={{ height: inputHeight, width: "100%", minHeight: 3, paddingLeft: 1, paddingRight: 1 }}
         />
       </box>
       <box
