@@ -27,13 +27,9 @@ const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
-  { name: "return", action: "submit" },
-  { name: "linefeed", action: "submit" },
-  { name: "return", shift: true, action: "newline" },
   { name: "return", ctrl: true, action: "newline" },
   { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
-  { name: "linefeed", shift: true, action: "newline" },
   { name: "linefeed", ctrl: true, action: "newline" },
   { name: "linefeed", meta: true, action: "newline" },
   { name: "linefeed", alt: true, action: "newline" }
@@ -169,6 +165,7 @@ function useInputManager(
     editor.clear();
     setInputLineCount(MIN_INPUT_LINES);
     setAutoFollow(true);
+    editor.submit();
     void startStreamingResponder();
   }, [appendLines, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
@@ -304,7 +301,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           gap: 1
         }}
       >
-        <text fg="#a5b4fc">Input (Enter to send; Shift/Opt/Ctrl/Meta+Enter for newline)</text>
+        <text fg="#a5b4fc">Input (Enter to send; Ctrl/Meta/Alt+Enter for newline)</text>
         <textarea
           ref={props.textareaRef}
           focused
