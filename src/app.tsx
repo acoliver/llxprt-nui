@@ -304,15 +304,14 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
       </scrollbox>
       <box
         style={{
-          minHeight: 5,
-          maxHeight: MAX_INPUT_LINES + 6,
+          minHeight: 3,
+          maxHeight: MAX_INPUT_LINES + 4,
           border: true,
           padding: 1,
           flexDirection: "column",
-          gap: 1
+          gap: 0
         }}
       >
-        <text fg="#a5b4fc">Input (Enter to send; Ctrl/Meta/Alt+Enter for newline)</text>
         <textarea
           ref={props.textareaRef}
           focused
@@ -321,7 +320,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           onSubmit={props.handleSubmit}
           onContentChange={props.enforceInputLineBounds}
           wrapMode="word"
-          style={{ height: inputHeight, width: "100%", minHeight: 4, paddingLeft: 1, paddingRight: 1 }}
+          style={{ height: inputHeight, width: "100%", minHeight: 3, paddingLeft: 1, paddingRight: 1 }}
         />
       </box>
       <box
