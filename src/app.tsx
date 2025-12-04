@@ -3,6 +3,7 @@ import type { KeyBinding, ScrollBoxRenderable, TextareaRenderable } from "@opent
 import type { Dispatch, JSX, RefObject, SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { extractMentionQuery, getSuggestions, MAX_SUGGESTION_COUNT } from "./suggestions";
 
 type Role = "user" | "responder";
 type StreamState = "idle" | "streaming";
@@ -128,7 +129,9 @@ function useInputManager(
   appendLines: (role: Role, textLines: string[]) => void,
   setPromptCount: StateSetter<number>,
   setAutoFollow: StateSetter<boolean>,
-  startStreamingResponder: () => Promise<void>
+  startStreamingResponder: () => Promise<void>,
+  refreshMentions: () => void,
+  clearMentions: () => void
 ) {
   const [inputLineCount, setInputLineCount] = useState(MIN_INPUT_LINES);
 
@@ -139,7 +142,8 @@ function useInputManager(
     }
     const clamped = clampInputLines(editor.lineCount);
     setInputLineCount(clamped);
-  }, [textareaRef]);
+    refreshMentions();
+  }, [refreshMentions, textareaRef]);
 
   const handleSubmit = useCallback(() => {
     const editor = textareaRef.current;
@@ -159,9 +163,10 @@ function useInputManager(
     editor.clear();
     setInputLineCount(MIN_INPUT_LINES);
     setAutoFollow(true);
+    clearMentions();
     editor.submit();
     void startStreamingResponder();
-  }, [appendLines, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
+  }, [appendLines, clearMentions, refreshMentions, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
   return { inputLineCount, enforceInputLineBounds, handleSubmit };
 }
@@ -244,6 +249,32 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
   return { autoFollow, setAutoFollow, scrollBy, jumpToBottom, handleContentChange, handleMouseScroll };
 }
 
+function useMentionSuggestions(textareaRef: RefObject<TextareaRenderable>) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  const refresh = useCallback(() => {
+    const editor = textareaRef.current;
+    if (!editor) {
+      return;
+    }
+    const text = editor.plainText;
+    const cursor = editor.cursorOffset;
+    const mention = extractMentionQuery(text, cursor);
+    if (mention === null) {
+      setSuggestions([]);
+      return;
+    }
+    const next = getSuggestions(mention, MAX_SUGGESTION_COUNT);
+    setSuggestions(next);
+  }, [textareaRef]);
+
+  const clear = useCallback(() => {
+    setSuggestions([]);
+  }, []);
+
+  return { suggestions, refresh, clear };
+}
+
 interface ChatLayoutProps {
   readonly headerText: string;
   readonly lines: ChatLine[];
@@ -258,12 +289,14 @@ interface ChatLayoutProps {
   readonly responderWordCount: number;
   readonly streamState: StreamState;
   readonly onScroll: (event: { type: string }) => void;
+  readonly suggestions: string[];
 }
 
 function ChatLayout(props: ChatLayoutProps): JSX.Element {
   const visibleInputLines = Math.min(MAX_INPUT_LINES, clampInputLines(props.inputLineCount));
   const inputContainerHeight = Math.min(MAX_INPUT_LINES + 2, Math.max(MIN_INPUT_LINES + 2, visibleInputLines + 2));
   const textareaHeight = Math.max(3, inputContainerHeight - 2);
+  const suggestionHeight = props.suggestions.length > 0 ? MAX_SUGGESTION_COUNT : 0;
 
   return (
     <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
@@ -317,6 +350,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           keyBindings={TEXTAREA_KEY_BINDINGS}
           onSubmit={props.handleSubmit}
           onContentChange={props.enforceInputLineBounds}
+          onCursorChange={props.enforceInputLineBounds}
           wrapMode="word"
           style={{
             height: textareaHeight,
@@ -330,6 +364,25 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           }}
         />
       </box>
+      {suggestionHeight > 0 ? (
+        <box
+          style={{
+            height: suggestionHeight,
+            minHeight: suggestionHeight,
+            maxHeight: suggestionHeight,
+            border: true,
+            paddingLeft: 1,
+            paddingRight: 1,
+            paddingTop: 0,
+            paddingBottom: 0,
+            flexDirection: "column"
+          }}
+        >
+          {Array.from({ length: MAX_SUGGESTION_COUNT }).map((_, index) => (
+            <text key={`suggestion-${index}`}>{props.suggestions[index] ?? ""}</text>
+          ))}
+        </box>
+      ) : null}
       <box
         style={{
           minHeight: 1,
@@ -367,6 +420,7 @@ export function App(): JSX.Element {
   const streamRunId = useRef(0);
   const nextLineId = useRef(0);
   const mountedRef = useRef(true);
+  const { suggestions, refresh: refreshMentions, clear: clearMentions } = useMentionSuggestions(textareaRef);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -410,7 +464,9 @@ export function App(): JSX.Element {
     appendLines,
     setPromptCount,
     setAutoFollow,
-    startStreamingResponder
+    startStreamingResponder,
+    refreshMentions,
+    clearMentions
   );
 
   const statusLabel = useMemo(() => {
@@ -436,6 +492,7 @@ export function App(): JSX.Element {
       responderWordCount={responderWordCount}
       streamState={streamState}
       onScroll={handleMouseScroll}
+      suggestions={suggestions}
     />
   );
 }

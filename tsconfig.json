@@ -13,7 +13,7 @@
     "noUnusedParameters": true,
     "exactOptionalPropertyTypes": true,
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "vitest"],
     "skipLibCheck": true,
     "verbatimModuleSyntax": true
   },
