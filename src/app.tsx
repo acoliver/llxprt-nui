@@ -268,7 +268,7 @@ interface ChatLayoutProps {
 
 function ChatLayout(props: ChatLayoutProps): JSX.Element {
   const visibleInputLines = Math.min(MAX_INPUT_LINES, clampInputLines(props.inputLineCount));
-  const inputHeight = Math.max(3, visibleInputLines);
+  const inputContainerHeight = Math.min(MAX_INPUT_LINES + 2, Math.max(MIN_INPUT_LINES + 2, visibleInputLines + 2));
 
   return (
     <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
@@ -303,7 +303,8 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
       </scrollbox>
       <box
         style={{
-          minHeight: 3,
+          height: inputContainerHeight,
+          minHeight: MIN_INPUT_LINES + 2,
           maxHeight: MAX_INPUT_LINES + 2,
           border: true,
           padding: 1,
@@ -320,10 +321,9 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           onContentChange={props.enforceInputLineBounds}
           wrapMode="word"
           style={{
-            height: inputHeight,
-            maxHeight: MAX_INPUT_LINES,
+            height: "100%",
             width: "100%",
-            minHeight: 3,
+            minHeight: "100%",
             paddingLeft: 1,
             paddingRight: 1
           }}
