@@ -65,6 +65,31 @@ export function extractMentionQuery(input: string, cursorOffset: number): string
   return query;
 }
 
+export function findMentionRange(input: string, cursorOffset: number): { start: number; end: number } | null {
+  const safeOffset = Math.min(Math.max(cursorOffset, 0), input.length);
+  const upToCursor = input.slice(0, safeOffset);
+  const atIndex = upToCursor.lastIndexOf("@");
+
+  if (atIndex === -1) {
+    return null;
+  }
+
+  if (atIndex > 0 && /\S/.test(upToCursor[atIndex - 1] ?? "")) {
+    return null;
+  }
+
+  let end = safeOffset;
+  while (end < input.length) {
+    const char = input[end] ?? "";
+    if (char === "\n" || char.trim() === "") {
+      break;
+    }
+    end += 1;
+  }
+
+  return { start: atIndex, end };
+}
+
 export const SUGGESTION_SOURCE = FILE_ENTRIES;
 export const MAX_SUGGESTION_COUNT = MAX_SUGGESTIONS;
 

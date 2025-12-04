@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractMentionQuery, getSuggestions } from "./suggestions";
+import { extractMentionQuery, findMentionRange, getSuggestions } from "./suggestions";
 
 describe("getSuggestions", () => {
   it("returns matches starting with query first", () => {
@@ -34,5 +34,14 @@ describe("extractMentionQuery", () => {
 
   it("ignores @ inside words", () => {
     expect(extractMentionQuery("hello@pac", 9)).toBeNull();
+  });
+
+  it("finds mention range for replacement", () => {
+    const range = findMentionRange("test @pa th", 8);
+    expect(range).toEqual({ start: 5, end: 8 });
+  });
+
+  it("returns null range when none", () => {
+    expect(findMentionRange("test", 2)).toBeNull();
   });
 });
