@@ -285,7 +285,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
         onMouse={props.onScroll}
         focused
       >
-        <box flexDirection="column" style={{ gap: 0, width: "100%", paddingLeft: 4, paddingRight: 2 }}>
+        <box flexDirection="column" style={{ gap: 0, width: "100%", paddingLeft: 8, paddingRight: 2 }}>
           {props.lines.map((line) => (
             <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
               [{line.role}] {line.text}
