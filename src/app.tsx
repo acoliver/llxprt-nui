@@ -139,12 +139,6 @@ function useInputManager(
     }
     const clamped = clampInputLines(editor.lineCount);
     setInputLineCount(clamped);
-
-    if (editor.lineCount > MAX_INPUT_LINES) {
-      const limited = editor.plainText.split(/\r?\n/).slice(0, MAX_INPUT_LINES).join("\n");
-      editor.setText(limited);
-      editor.gotoBufferEnd();
-    }
   }, [textareaRef]);
 
   const handleSubmit = useCallback(() => {
@@ -159,7 +153,7 @@ function useInputManager(
     if (raw.trim() === "/quit") {
       process.exit(0);
     }
-    const userLines = raw.split(/\r?\n/).slice(0, MAX_INPUT_LINES);
+    const userLines = raw.split(/\r?\n/);
     appendLines("user", userLines);
     setPromptCount((count) => count + 1);
     editor.clear();
@@ -307,7 +301,10 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           minHeight: MIN_INPUT_LINES + 2,
           maxHeight: MAX_INPUT_LINES + 2,
           border: true,
-          padding: 1,
+          paddingTop: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+          paddingRight: 0,
           flexDirection: "column",
           gap: 0
         }}
@@ -325,7 +322,9 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
             width: "100%",
             minHeight: "100%",
             paddingLeft: 1,
-            paddingRight: 1
+            paddingRight: 1,
+            paddingTop: 0,
+            paddingBottom: 0
           }}
         />
       </box>
