@@ -28,10 +28,15 @@ const PAGE_STEP = 10;
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
+  { name: "linefeed", action: "submit" },
   { name: "return", shift: true, action: "newline" },
   { name: "return", ctrl: true, action: "newline" },
   { name: "return", meta: true, action: "newline" },
-  { name: "return", alt: true, action: "newline" }
+  { name: "return", alt: true, action: "newline" },
+  { name: "linefeed", shift: true, action: "newline" },
+  { name: "linefeed", ctrl: true, action: "newline" },
+  { name: "linefeed", meta: true, action: "newline" },
+  { name: "linefeed", alt: true, action: "newline" }
 ];
 
 const OPENERS = [
@@ -265,7 +270,7 @@ interface ChatLayoutProps {
 }
 
 function ChatLayout(props: ChatLayoutProps): JSX.Element {
-  const inputHeight = Math.max(3, clampInputLines(props.inputLineCount) + 1);
+  const inputHeight = Math.max(4, clampInputLines(props.inputLineCount) + 1);
 
   return (
     <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
@@ -279,10 +284,11 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
         stickyStart="bottom"
         scrollY
         onMouse={props.onScroll}
+        focused
       >
-        <box flexDirection="column" style={{ gap: 0, paddingLeft: 1, width: "100%" }}>
+        <box flexDirection="column" style={{ gap: 0, paddingLeft: 2, width: "100%" }}>
           {props.lines.map((line) => (
-            <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
+            <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"} style={{ paddingLeft: 1 }}>
               [{line.role}] {line.text}
             </text>
           ))}
@@ -307,7 +313,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           onSubmit={props.handleSubmit}
           onContentChange={props.enforceInputLineBounds}
           wrapMode="word"
-          style={{ height: inputHeight, width: "100%", minHeight: 3, paddingLeft: 1, paddingRight: 1 }}
+          style={{ height: inputHeight, width: "100%", minHeight: 4, paddingLeft: 1, paddingRight: 1 }}
         />
       </box>
       <box
