@@ -152,6 +152,9 @@ function useInputManager(
     if (raw.trim().length === 0) {
       return;
     }
+    if (raw.trim() === "/quit") {
+      process.exit(0);
+    }
     const userLines = raw.split(/\r?\n/).slice(0, MAX_INPUT_LINES);
     appendLines("user", userLines);
     setPromptCount((count) => count + 1);
