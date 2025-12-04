@@ -27,11 +27,13 @@ const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
+  { name: "return", action: "submit" },
+  { name: "return", shift: true, action: "newline" },
   { name: "return", ctrl: true, action: "newline" },
-  { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
+  { name: "linefeed", action: "submit" },
+  { name: "linefeed", shift: true, action: "newline" },
   { name: "linefeed", ctrl: true, action: "newline" },
-  { name: "linefeed", meta: true, action: "newline" },
   { name: "linefeed", alt: true, action: "newline" }
 ];
 
@@ -283,10 +285,10 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
         onMouse={props.onScroll}
         focused
       >
-        <box flexDirection="column" style={{ gap: 0, paddingLeft: 2, width: "100%" }}>
+        <box flexDirection="column" style={{ gap: 0, paddingLeft: 3, width: "100%" }}>
           {props.lines.map((line) => (
             <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"} style={{ paddingLeft: 1 }}>
-              [{line.role}] {line.text}
+              {" "}[{line.role}] {line.text}
             </text>
           ))}
         </box>
