@@ -263,6 +263,7 @@ interface ChatLayoutProps {
 function ChatLayout(props: ChatLayoutProps): JSX.Element {
   const visibleInputLines = Math.min(MAX_INPUT_LINES, clampInputLines(props.inputLineCount));
   const inputContainerHeight = Math.min(MAX_INPUT_LINES + 2, Math.max(MIN_INPUT_LINES + 2, visibleInputLines + 2));
+  const textareaHeight = Math.max(3, inputContainerHeight - 2);
 
   return (
     <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
@@ -318,9 +319,10 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
           onContentChange={props.enforceInputLineBounds}
           wrapMode="word"
           style={{
-            height: "100%",
+            height: textareaHeight,
+            minHeight: textareaHeight,
+            maxHeight: textareaHeight,
             width: "100%",
-            minHeight: "100%",
             paddingLeft: 1,
             paddingRight: 1,
             paddingTop: 0,
