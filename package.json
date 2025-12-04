@@ -1,0 +1,39 @@
+{
+  "name": "nui",
+  "version": "1.0.0",
+  "description": "OpenTUI React chat demo with streaming mock responder",
+  "main": "src/main.tsx",
+  "scripts": {
+    "start": "bun run src/main.tsx",
+    "dev": "bun run src/main.tsx",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
+    "check:limits": "tsx scripts/check-limits.ts",
+    "check": "npm run lint && npm run check:limits"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.0"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.56",
+    "@opentui/react": "^0.1.56",
+    "react": "^19.2.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@typescript-eslint/eslint-plugin": "^8.48.1",
+    "@typescript-eslint/parser": "^8.48.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-sonarjs": "^3.0.5",
+    "globals": "^16.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
