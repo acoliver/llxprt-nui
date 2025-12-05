@@ -27,7 +27,6 @@ export function ModalShell(props: ModalShellProps): JSX.Element {
         left: 0,
         width: "100%",
         height: "100%",
-        bg: "#0f172a",
         padding: 1,
         alignItems: "center",
         justifyContent: "center"
@@ -39,6 +38,7 @@ export function ModalShell(props: ModalShellProps): JSX.Element {
           width: props.width ?? "95%",
           maxWidth: props.width ?? "95%",
           padding: 1,
+          backgroundColor: "#0f172a",
           flexDirection: "column",
           gap: 1
         }}
