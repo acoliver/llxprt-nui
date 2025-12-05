@@ -21,7 +21,7 @@
     "input": {
       "bg": "#1d2a1d",
       "fg": "#6a9955",
-      "placeholder": "#6a9955",
+      "placeholder": "#3b7a3b",
       "border": "#6a9955"
     },
     "status": {
