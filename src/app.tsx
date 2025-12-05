@@ -516,7 +516,7 @@ function renderToolBlock(block: ToolBlock): JSX.Element {
         width: "100%",
         flexDirection: "column",
         gap: 0,
-        borderStyle: block.isBatch ? "round" : "single"
+        borderStyle: block.isBatch ? "rounded" : "single"
       }}
     >
       {block.lines.map((line, index) => (
