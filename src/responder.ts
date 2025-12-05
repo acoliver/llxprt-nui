@@ -1,5 +1,10 @@
 import { secureRandomBetween } from "./random";
 
+export interface ToolCallBlock {
+  readonly lines: string[];
+  readonly isBatch: boolean;
+}
+
 const OPENERS = [
   "Camus shrugs at the sky,",
   "Nietzsche laughs in the dark,",
@@ -52,7 +57,7 @@ const SAMPLE_FILES = [
 
 const SAMPLE_PATTERNS = ["useState", "Modal", "stream", "return", "export function", "const "];
 
-export function maybeBuildToolCalls(): string[] | null {
+export function maybeBuildToolCalls(): ToolCallBlock | null {
   if (secureRandomBetween(0, 6) !== 0) {
     return null;
   }
@@ -60,9 +65,9 @@ export function maybeBuildToolCalls(): string[] | null {
   const count = secureRandomBetween(1, 5);
   const calls = Array.from({ length: count }, () => buildToolCallLines(randomToolKind())).flat();
   if (parallel) {
-    return [`[tool batch] ${count} calls`, ...calls.map((line) => `  ${line}`)];
+    return { lines: [`[tool batch] ${count} calls`, ...calls.map((line) => `  ${line}`)], isBatch: true };
   }
-  return calls;
+  return { lines: calls, isBatch: false };
 }
 
 function buildToolCallLines(kind: ToolKind): string[] {

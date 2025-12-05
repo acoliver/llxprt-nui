@@ -14,8 +14,15 @@ type Role = "user" | "responder";
 type StreamState = "idle" | "streaming";
 interface ChatLine {
   id: string;
+  kind: "line";
   role: Role;
   text: string;
+}
+interface ToolBlock {
+  id: string;
+  kind: "tool";
+  lines: string[];
+  isBatch: boolean;
 }
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 interface RefHandle<T> {
@@ -43,7 +50,7 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "linefeed", action: "newline" }
 ];
 function useChatStore(makeLineId: () => string) {
-  const [lines, setLines] = useState<ChatLine[]>([]);
+  const [lines, setLines] = useState<(ChatLine | ToolBlock)[]>([]);
   const [promptCount, setPromptCount] = useState(0);
   const [responderWordCount, setResponderWordCount] = useState(0);
   const [streamState, setStreamState] = useState<StreamState>("idle");
@@ -54,6 +61,7 @@ function useChatStore(makeLineId: () => string) {
         ...prev,
         ...textLines.map((text) => ({
           id: makeLineId(),
+          kind: "line" as const,
           role,
           text
         }))
@@ -62,9 +70,25 @@ function useChatStore(makeLineId: () => string) {
     [makeLineId]
   );
 
+  const appendToolBlock = useCallback(
+    (tool: { lines: string[]; isBatch: boolean }) => {
+      setLines((prev) => [
+        ...prev,
+        {
+          id: makeLineId(),
+          kind: "tool",
+          lines: tool.lines,
+          isBatch: tool.isBatch
+        }
+      ]);
+    },
+    [makeLineId]
+  );
+
   return {
     lines,
     appendLines,
+    appendToolBlock,
     promptCount,
     setPromptCount,
     responderWordCount,
@@ -76,6 +100,7 @@ function useChatStore(makeLineId: () => string) {
 
 function useStreamingResponder(
   appendLines: (role: Role, textLines: string[]) => void,
+  appendToolBlock: (tool: { lines: string[]; isBatch: boolean }) => void,
   setResponderWordCount: StateSetter<number>,
   setStreamState: StateSetter<StreamState>,
   streamRunId: RefHandle<number>,
@@ -91,9 +116,9 @@ function useStreamingResponder(
       if (!mountedRef.current || streamRunId.current !== currentRun) {
         return;
       }
-      const toolLines = maybeBuildToolCalls();
-      if (toolLines) {
-        appendLines("responder", toolLines);
+      const toolBlock = maybeBuildToolCalls();
+      if (toolBlock) {
+        appendToolBlock(toolBlock);
       }
       const line = buildResponderLine();
       appendLines("responder", [line]);
@@ -104,7 +129,7 @@ function useStreamingResponder(
     if (streamRunId.current === currentRun && mountedRef.current) {
       setStreamState("idle");
     }
-  }, [appendLines, mountedRef, setResponderWordCount, setStreamState, streamRunId]);
+  }, [appendLines, appendToolBlock, mountedRef, setResponderWordCount, setStreamState, streamRunId]);
 }
 
 function useInputManager(
@@ -256,7 +281,7 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
 
 interface ChatLayoutProps {
   readonly headerText: string;
-  readonly lines: ChatLine[];
+  readonly lines: (ChatLine | ToolBlock)[];
   readonly scrollRef: RefObject<ScrollBoxRenderable>;
   readonly autoFollow: boolean;
   readonly textareaRef: RefObject<TextareaRenderable>;
@@ -319,15 +344,13 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
       scrollY
       onMouse={props.onScroll}
       focused
-    >
-      <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
-        {props.lines.map((line) => (
-          <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
-            [{line.role}] {line.text}
-          </text>
-        ))}
-      </box>
-    </scrollbox>
+      >
+        <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
+          {props.lines.map((entry) =>
+            entry.kind === "line" ? renderChatLine(entry) : renderToolBlock(entry)
+          )}
+        </box>
+      </scrollbox>
   );
 }
 
@@ -472,6 +495,39 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
   );
 }
 
+function renderChatLine(line: ChatLine): JSX.Element {
+  const color = line.role === "user" ? "#7dd3fc" : "#facc15";
+  return (
+    <text key={line.id} fg={color}>
+      [{line.role}] {line.text}
+    </text>
+  );
+}
+
+function renderToolBlock(block: ToolBlock): JSX.Element {
+  return (
+    <box
+      key={block.id}
+      border
+      style={{
+        padding: 1,
+        marginTop: 0,
+        marginBottom: 0,
+        width: "100%",
+        flexDirection: "column",
+        gap: 0,
+        borderStyle: block.isBatch ? "round" : "single"
+      }}
+    >
+      {block.lines.map((line, index) => (
+        <text key={`${block.id}-line-${index}`} fg="#c084fc">
+          {line}
+        </text>
+      ))}
+    </box>
+  );
+}
+
 function isEnterKey(key: KeyEvent): boolean {
   return (
     key.name === "return" ||
@@ -591,8 +647,17 @@ export function App(): JSX.Element {
 
   const makeLineId = useLineIdGenerator();
 
-  const { lines, appendLines, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } =
-    useChatStore(makeLineId);
+  const {
+    lines,
+    appendLines,
+    appendToolBlock,
+    promptCount,
+    setPromptCount,
+    responderWordCount,
+    setResponderWordCount,
+    streamState,
+    setStreamState
+  } = useChatStore(makeLineId);
   const { modalOpen, modalElement, handleCommand } = useModalManager(appendLines, () => textareaRef.current?.focus());
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
@@ -601,7 +666,14 @@ export function App(): JSX.Element {
     handleContentChange();
   }, [handleContentChange, lines.length]);
 
-  const startStreamingResponder = useStreamingResponder(appendLines, setResponderWordCount, setStreamState, streamRunId, mountedRef);
+  const startStreamingResponder = useStreamingResponder(
+    appendLines,
+    appendToolBlock,
+    setResponderWordCount,
+    setStreamState,
+    streamRunId,
+    mountedRef
+  );
 
   const cancelStreaming = useCallback(() => {
     streamRunId.current += 1;
