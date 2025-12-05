@@ -144,7 +144,7 @@ function useStreamingResponder(
     setStreamState("streaming");
     const total = secureRandomBetween(STREAM_MIN_LINES, STREAM_MAX_LINES);
 
-    const startShellStream = (plan: ShellPlan) => {
+    const startShellStream = async (plan: ShellPlan) => {
       const id = appendToolBlock({
         lines: [`[tool] Shell ${plan.command}`],
         isBatch: false,
@@ -152,7 +152,7 @@ function useStreamingResponder(
         maxHeight: plan.maxHeight,
         streaming: true
       });
-      void streamShellOutput(plan, id, currentRun, updateToolBlock, streamRunId, mountedRef);
+      await streamShellOutput(plan, id, currentRun, updateToolBlock, streamRunId, mountedRef);
     };
 
     for (let index = 0; index < total; index += 1) {
@@ -161,7 +161,8 @@ function useStreamingResponder(
       }
       const shellPlan = maybeBuildShellPlan();
       if (shellPlan) {
-        startShellStream(shellPlan);
+        await startShellStream(shellPlan);
+        continue;
       }
       if (secureRandomBetween(0, 4) === 0) {
         const thoughtCount = secureRandomBetween(1, 2);
@@ -583,6 +584,7 @@ function renderToolBlock(block: ToolBlock): JSX.Element {
       }}
       contentOptions={{ paddingLeft: 0, paddingRight: 0 }}
       scrollY
+      scrollX={false}
     >
       <box flexDirection="column" style={{ gap: 0, width: "100%", paddingLeft: 0, paddingRight: 0 }}>
         {block.lines.map((line, index) => (
