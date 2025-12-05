@@ -557,8 +557,8 @@ function StatusBar(props: StatusBarProps): JSX.Element {
         backgroundColor: props.theme.colors.panel.bg
       }}
     >
-      <text fg={props.theme.colors.text.muted ?? props.theme.colors.text.primary}>{props.statusLabel}</text>
-      <text fg={props.theme.colors.status.fg}>
+      <text fg={props.theme.colors.text.primary}>{props.statusLabel}</text>
+      <text fg={props.theme.colors.text.primary}>
         {`prompts: ${props.promptCount} | words: ${props.responderWordCount} | ${props.streamState}`}
       </text>
     </box>
