@@ -44,7 +44,7 @@ interface RefHandle<T> {
   current: T;
 }
 
-const HEADER_TEXT = "New UI Demo 20251204";
+const HEADER_TEXT = "LLxprt Code - I'm here to help";
 const MIN_INPUT_LINES = 1;
 const MAX_INPUT_LINES = 10;
 const STREAM_MIN_LINES = 5;
@@ -399,9 +399,16 @@ function HeaderBar({ text, theme }: { readonly text: string; readonly theme: The
         border: true,
         padding: 1,
         borderColor: theme.colors.panel.border,
-        backgroundColor: theme.colors.panel.headerBg ?? theme.colors.panel.bg
+        backgroundColor: theme.colors.panel.headerBg ?? theme.colors.panel.bg,
+        alignItems: "center",
+        gap: 1
       }}
     >
+      <ascii-font
+        text="LLXPRT"
+        font="block"
+        style={{ fg: theme.colors.panel.headerFg ?? theme.colors.text.primary, marginRight: 1 }}
+      />
       <text fg={theme.colors.panel.headerFg ?? theme.colors.text.primary}>{text}</text>
     </box>
   );
