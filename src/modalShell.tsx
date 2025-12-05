@@ -20,6 +20,7 @@ export function ModalShell(props: ModalShellProps): JSX.Element {
 
   return (
     <box
+      shouldFill
       style={{
         position: "absolute",
         top: 0,
