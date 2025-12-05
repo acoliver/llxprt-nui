@@ -1,6 +1,7 @@
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import type { KeyBinding, KeyEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
+import { parseColor, stringToStyledText } from "@opentui/core";
 import type { Dispatch, JSX, RefObject, SetStateAction } from "react";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +46,9 @@ interface RefHandle<T> {
 }
 
 const HEADER_TEXT = "LLxprt Code - I'm here to help";
+const LOGO_PATH = path.resolve(process.cwd(), "llxprt.png");
+const LOGO_PX_WIDTH = 150;
+const LOGO_PX_HEIGHT = 90;
 const MIN_INPUT_LINES = 1;
 const MAX_INPUT_LINES = 10;
 const STREAM_MIN_LINES = 5;
@@ -52,6 +56,7 @@ const STREAM_MAX_LINES = 800;
 const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
 const KEY_LOG_PATH = path.resolve(process.cwd(), "key-events.log");
+const HEADER_LOG_PATH = path.resolve(process.cwd(), "log/header-metrics.log");
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "return", action: "submit" },
@@ -391,25 +396,103 @@ interface StatusBarProps {
 }
 
 function HeaderBar({ text, theme }: { readonly text: string; readonly theme: ThemeDefinition }): JSX.Element {
+  const renderer = useRenderer();
+  const [, setMetricTick] = useState(0);
+  const lastResolution = useRef<string | null>(null);
+
+  useEffect(() => {
+    const bump = () => setMetricTick((tick) => tick + 1);
+    renderer.on("capabilities", bump);
+    renderer.on("pixelResolution", bump);
+    renderer.on("resize", bump);
+    const interval = setInterval(() => {
+      const current = renderer.resolution ? JSON.stringify(renderer.resolution) : null;
+      if (current !== lastResolution.current) {
+        lastResolution.current = current;
+        setMetricTick((tick) => tick + 1);
+      }
+    }, 500);
+    return () => {
+      renderer.off("capabilities", bump);
+      renderer.off("pixelResolution", bump);
+      renderer.off("resize", bump);
+      clearInterval(interval);
+    };
+  }, [renderer]);
+
+  const caps = renderer.capabilities as { pixelResolution?: { width: number; height: number } } | null;
+  const resolution = caps?.pixelResolution ?? renderer.resolution ?? null;
+  const pxPerCellX = resolution && renderer.terminalWidth > 0 ? resolution.width / renderer.terminalWidth : null;
+  const pxPerCellY = resolution && renderer.terminalHeight > 0 ? resolution.height / renderer.terminalHeight : null;
+  const desiredCellHeight = 2;
+  const scaleFactor = 0.9; // modest shrink to keep it inside the border
+  const fallbackPxPerCellX = 9;
+  const fallbackPxPerCellY = 20;
+  const scaledPixelHeight = Math.round(
+    pxPerCellY != null
+      ? Math.min(LOGO_PX_HEIGHT * scaleFactor, pxPerCellY * desiredCellHeight * scaleFactor)
+      : LOGO_PX_HEIGHT * scaleFactor
+  );
+  const scaledPixelWidth = Math.max(1, Math.round((scaledPixelHeight * LOGO_PX_WIDTH) / LOGO_PX_HEIGHT));
+  const effPxPerCellX = pxPerCellX ?? fallbackPxPerCellX;
+  const effPxPerCellY = pxPerCellY ?? fallbackPxPerCellY;
+  const logoWidthCells = Math.max(1, Math.ceil(scaledPixelWidth / effPxPerCellX));
+  const logoHeightCells = Math.max(1, Math.ceil(scaledPixelHeight / effPxPerCellY));
+  const headerHeight = Math.max(logoHeightCells + 1, 3);
+
+  useEffect(() => {
+    const logLine = JSON.stringify(
+      {
+        pixelResolution: resolution ?? null,
+        terminal: { cols: renderer.terminalWidth, rows: renderer.terminalHeight },
+        pxPerCellX: pxPerCellX ?? null,
+        pxPerCellY: pxPerCellY ?? null,
+        logo: {
+          pixel: { width: scaledPixelWidth, height: scaledPixelHeight },
+          cells: { width: logoWidthCells, height: logoHeightCells }
+        },
+        headerHeight
+      },
+      null,
+      0
+    );
+    appendFileSync(HEADER_LOG_PATH, `${logLine}\n`, "utf8");
+  }, [resolution, pxPerCellX, pxPerCellY, scaledPixelWidth, scaledPixelHeight, logoWidthCells, logoHeightCells, headerHeight, renderer.terminalWidth, renderer.terminalHeight]);
+
   return (
     <box
       style={{
-        minHeight: 1,
-        maxHeight: 5,
         border: true,
-        padding: 1,
+        height: headerHeight,
+        minHeight: headerHeight,
+        maxHeight: headerHeight,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
         borderColor: theme.colors.panel.border,
         backgroundColor: theme.colors.panel.headerBg ?? theme.colors.panel.bg,
         alignItems: "center",
-        gap: 1
+        flexDirection: "row",
+        gap: 0,
+        justifyContent: "flex-start"
       }}
     >
-      <ascii-font
-        text="LLXPRT"
-        font="block"
-        style={{ fg: theme.colors.panel.headerFg ?? theme.colors.text.primary, marginRight: 1 }}
+      <image
+        src={LOGO_PATH}
+        alt="LLxprt Code"
+        width={logoWidthCells}
+        height={logoHeightCells}
+        pixelWidth={scaledPixelWidth}
+        pixelHeight={scaledPixelHeight}
+        style={{ marginRight: 1 }}
       />
-      <text fg={theme.colors.panel.headerFg ?? theme.colors.text.primary}>{text}</text>
+      <text
+        fg={theme.colors.panel.headerFg ?? theme.colors.text.primary}
+        style={{ marginLeft: 1, alignSelf: "center" }}
+      >
+        {text}
+      </text>
     </box>
   );
 }
@@ -425,6 +508,7 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
         paddingBottom: 0,
         paddingLeft: 0,
         paddingRight: 0,
+        overflow: "hidden",
         borderColor: props.theme.colors.panel.border,
         backgroundColor: props.theme.colors.panel.bg
       }}
@@ -446,6 +530,12 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
 }
 
 function InputArea(props: InputAreaProps): JSX.Element {
+  const placeholderText = useMemo(() => {
+    const base = stringToStyledText("Type a thought, then submit with Enter");
+    const fg = parseColor(props.theme.colors.input.placeholder);
+    return { ...base, chunks: base.chunks.map((chunk) => ({ ...chunk, fg })) };
+  }, [props.theme.colors.input.placeholder]);
+
   return (
     <box
       style={{
@@ -466,7 +556,7 @@ function InputArea(props: InputAreaProps): JSX.Element {
       <textarea
         ref={props.textareaRef}
         focused
-        placeholder="Type a thought, then submit with Enter"
+        placeholder={placeholderText}
         keyBindings={TEXTAREA_KEY_BINDINGS}
         onSubmit={props.handleSubmit}
         onContentChange={props.enforceInputLineBounds}
@@ -485,6 +575,10 @@ function InputArea(props: InputAreaProps): JSX.Element {
           bg: props.theme.colors.input.bg,
           borderColor: props.theme.colors.input.border
         }}
+        textColor={props.theme.colors.input.fg}
+        focusedTextColor={props.theme.colors.input.fg}
+        backgroundColor={props.theme.colors.input.bg}
+        focusedBackgroundColor={props.theme.colors.input.bg}
       />
     </box>
   );
@@ -639,7 +733,8 @@ function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element 
         paddingTop: 0,
         paddingBottom: 0,
         height: Math.min(block.lines.length + 1, block.maxHeight ?? block.lines.length + 1),
-        maxHeight: block.maxHeight
+        maxHeight: block.maxHeight,
+        overflow: "hidden"
       }}
       contentOptions={{ paddingLeft: 0, paddingRight: 0 }}
       scrollY
@@ -674,7 +769,8 @@ function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element 
         gap: 0,
         borderStyle: block.isBatch ? "rounded" : "single",
         borderColor: theme.colors.panel.border,
-        backgroundColor: theme.colors.panel.bg
+        backgroundColor: theme.colors.panel.bg,
+        overflow: "hidden"
       }}
     >
       {content}

@@ -9,3 +9,4 @@ const renderer = await createCliRenderer({
 });
 
 createRoot(renderer).render(<App />);
+renderer.start();

@@ -8,4 +8,6 @@ dist/
 coverage/
 .nyc_output/
 key-events.log
+log/
 reference/
+.npm-cache/
