@@ -533,7 +533,9 @@ function useSuggestionKeybindings(
   suggestionCount: number,
   moveSelection: (delta: number) => void,
   handleTabComplete: () => void,
-  cancelStreaming: () => void
+  cancelStreaming: () => void,
+  clearInput: () => void,
+  isStreaming: () => boolean
 ): void {
   const hasSuggestions = suggestionCount > 0;
   useKeyboard((key) => {
@@ -547,7 +549,11 @@ function useSuggestionKeybindings(
       key.preventDefault?.();
       handleTabComplete();
     } else if (key.name === "escape") {
-      cancelStreaming();
+      if (isStreaming()) {
+        cancelStreaming();
+      } else {
+        clearInput();
+      }
     }
   });
 }
@@ -613,7 +619,17 @@ export function App(): JSX.Element {
 
   useEnterSubmit(handleSubmit, modalOpen);
   useKeyPressLogging();
-  useSuggestionKeybindings(modalOpen ? 0 : suggestions.length, moveSelection, handleTabComplete, cancelStreaming);
+  useSuggestionKeybindings(
+    modalOpen ? 0 : suggestions.length,
+    moveSelection,
+    handleTabComplete,
+    cancelStreaming,
+    () => {
+      textareaRef.current?.clear();
+      enforceInputLineBounds();
+    },
+    () => streamState === "streaming"
+  );
   useKeyboard((key) => {
     if (modalOpen || suggestions.length > 0 || key.eventType !== "press") {
       return;
