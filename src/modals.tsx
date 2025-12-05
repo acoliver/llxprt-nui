@@ -75,17 +75,24 @@ export function ModalShell(props: ModalShellProps): JSX.Element {
   );
 }
 
-export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
-  const searchRef = useRef<TextareaRenderable>(null);
+interface SearchState {
+  readonly query: string;
+  readonly setQuery: (value: string) => void;
+  readonly selectedIndex: number;
+  readonly setSelectedIndex: (value: number) => void;
+}
+
+function useSearchState(): SearchState {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  return { query, setQuery, selectedIndex, setSelectedIndex };
+}
 
+export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
+  const searchRef = useRef<TextareaRenderable>(null);
+  const { query, setQuery, selectedIndex, setSelectedIndex } = useSearchState();
   const filtered = useMemo(() => filterItems(props.items, query, props.alphabetical), [props.alphabetical, props.items, query]);
-
-  const pageStart = Math.floor(selectedIndex / SEARCH_PAGE_SIZE) * SEARCH_PAGE_SIZE;
-  const visible = filtered.slice(pageStart, pageStart + SEARCH_PAGE_SIZE);
-  const startDisplay = filtered.length === 0 ? 0 : pageStart + 1;
-  const endDisplay = Math.min(pageStart + visible.length, filtered.length);
+  const { pageStart, visible, startDisplay, endDisplay } = getPagination(filtered, selectedIndex);
 
   const current = filtered[selectedIndex];
 
@@ -119,7 +126,7 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
         />
       </box>
       <text>{`Showing ${startDisplay}-${endDisplay} of ${filtered.length} rows`}</text>
-      <box flexDirection="column" style={{ gap: 0 }}>{renderSearchGrid(visible, pageStart, selectedIndex)}</box>
+      <SearchGrid items={visible} pageStart={pageStart} selectedIndex={selectedIndex} />
     </ModalShell>
   );
 }
@@ -177,6 +184,29 @@ export function AuthModal(props: {
       <text>https://github.com/acoliver/llxprt-code/blob/main/docs/tos-privacy.md</text>
     </ModalShell>
   );
+}
+
+interface SearchGridProps {
+  readonly items: SearchItem[];
+  readonly pageStart: number;
+  readonly selectedIndex: number;
+}
+
+function SearchGrid(props: SearchGridProps): JSX.Element {
+  return <box flexDirection="column" style={{ gap: 0 }}>{renderSearchGrid(props.items, props.pageStart, props.selectedIndex)}</box>;
+}
+
+function getPagination(filtered: SearchItem[], selectedIndex: number): {
+  pageStart: number;
+  visible: SearchItem[];
+  startDisplay: number;
+  endDisplay: number;
+} {
+  const pageStart = Math.floor(selectedIndex / SEARCH_PAGE_SIZE) * SEARCH_PAGE_SIZE;
+  const visible = filtered.slice(pageStart, pageStart + SEARCH_PAGE_SIZE);
+  const startDisplay = filtered.length === 0 ? 0 : pageStart + 1;
+  const endDisplay = Math.min(pageStart + visible.length, filtered.length);
+  return { pageStart, visible, startDisplay, endDisplay };
 }
 
 function chunkItems(list: SearchItem[], columns: number): SearchItem[][] {
