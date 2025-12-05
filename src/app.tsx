@@ -7,7 +7,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clipboard from "clipboardy";
 import { MAX_SUGGESTION_COUNT } from "./suggestions";
 import { useCompletionManager, type CompletionSuggestion } from "./completions";
-import { buildResponderLine, buildThinkingLine, countWords, maybeBuildToolCalls } from "./responder";
+import {
+  buildResponderLine,
+  buildThinkingLine,
+  countWords,
+  maybeBuildShellPlan,
+  maybeBuildToolCalls,
+  type ShellPlan
+} from "./responder";
 import { secureRandomBetween } from "./random";
 import { useModalManager } from "./modalManager";
 import { usePromptHistory } from "./history";
@@ -24,6 +31,9 @@ interface ToolBlock {
   kind: "tool";
   lines: string[];
   isBatch: boolean;
+  scrollable?: boolean;
+  maxHeight?: number;
+  streaming?: boolean;
 }
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 interface RefHandle<T> {
@@ -72,18 +82,37 @@ function useChatStore(makeLineId: () => string) {
   );
 
   const appendToolBlock = useCallback(
-    (tool: { lines: string[]; isBatch: boolean }) => {
+    (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => {
+      const id = makeLineId();
       setLines((prev) => [
         ...prev,
         {
-          id: makeLineId(),
+          id,
           kind: "tool",
           lines: tool.lines,
-          isBatch: tool.isBatch
+          isBatch: tool.isBatch,
+          scrollable: tool.scrollable,
+          maxHeight: tool.maxHeight,
+          streaming: tool.streaming
         }
       ]);
+      return id;
     },
     [makeLineId]
+  );
+
+  const updateToolBlock = useCallback(
+    (id: string, mutate: (block: ToolBlock) => ToolBlock) => {
+      setLines((prev) =>
+        prev.map((item) => {
+          if (item.kind !== "tool" || item.id !== id) {
+            return item;
+          }
+          return mutate(item);
+        })
+      );
+    },
+    []
   );
 
   return {
@@ -95,13 +124,15 @@ function useChatStore(makeLineId: () => string) {
     responderWordCount,
     setResponderWordCount,
     streamState,
-    setStreamState
+    setStreamState,
+    updateToolBlock
   };
 }
 
 function useStreamingResponder(
   appendLines: (role: Role, textLines: string[]) => void,
-  appendToolBlock: (tool: { lines: string[]; isBatch: boolean }) => void,
+  appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
+  updateToolBlock: (id: string, mutate: (block: ToolBlock) => ToolBlock) => void,
   setResponderWordCount: StateSetter<number>,
   setStreamState: StateSetter<StreamState>,
   streamRunId: RefHandle<number>,
@@ -113,9 +144,24 @@ function useStreamingResponder(
     setStreamState("streaming");
     const total = secureRandomBetween(STREAM_MIN_LINES, STREAM_MAX_LINES);
 
+    const startShellStream = (plan: ShellPlan) => {
+      const id = appendToolBlock({
+        lines: [`[tool] Shell ${plan.command}`],
+        isBatch: false,
+        scrollable: true,
+        maxHeight: plan.maxHeight,
+        streaming: true
+      });
+      void streamShellOutput(plan, id, currentRun, updateToolBlock, streamRunId, mountedRef);
+    };
+
     for (let index = 0; index < total; index += 1) {
       if (!mountedRef.current || streamRunId.current !== currentRun) {
         return;
+      }
+      const shellPlan = maybeBuildShellPlan();
+      if (shellPlan) {
+        startShellStream(shellPlan);
       }
       if (secureRandomBetween(0, 4) === 0) {
         const thoughtCount = secureRandomBetween(1, 2);
@@ -138,7 +184,7 @@ function useStreamingResponder(
     if (streamRunId.current === currentRun && mountedRef.current) {
       setStreamState("idle");
     }
-  }, [appendLines, appendToolBlock, mountedRef, setResponderWordCount, setStreamState, streamRunId]);
+  }, [appendLines, appendToolBlock, mountedRef, setResponderWordCount, setStreamState, streamRunId, updateToolBlock]);
 }
 
 function useInputManager(
@@ -525,6 +571,35 @@ function roleColor(role: Role): string {
 }
 
 function renderToolBlock(block: ToolBlock): JSX.Element {
+  const content = block.scrollable ? (
+    <scrollbox
+      style={{
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        height: Math.min(block.lines.length + 1, block.maxHeight ?? block.lines.length + 1),
+        maxHeight: block.maxHeight
+      }}
+      contentOptions={{ paddingLeft: 0, paddingRight: 0 }}
+      scrollY
+    >
+      <box flexDirection="column" style={{ gap: 0, width: "100%", paddingLeft: 0, paddingRight: 0 }}>
+        {block.lines.map((line, index) => (
+          <text key={`${block.id}-line-${index}`} fg="#c084fc">
+            {line}
+          </text>
+        ))}
+      </box>
+    </scrollbox>
+  ) : (
+    block.lines.map((line, index) => (
+      <text key={`${block.id}-line-${index}`} fg="#c084fc">
+        {line}
+      </text>
+    ))
+  );
+
   return (
     <box
       key={block.id}
@@ -539,11 +614,12 @@ function renderToolBlock(block: ToolBlock): JSX.Element {
         borderStyle: block.isBatch ? "rounded" : "single"
       }}
     >
-      {block.lines.map((line, index) => (
-        <text key={`${block.id}-line-${index}`} fg="#c084fc">
-          {line}
+      {content}
+      {block.streaming ? (
+        <text fg="#94a3b8" key={`${block.id}-streaming`}>
+          ...streaming...
         </text>
-      ))}
+      ) : null}
     </box>
   );
 }
@@ -677,7 +753,8 @@ export function App(): JSX.Element {
     responderWordCount,
     setResponderWordCount,
     streamState,
-    setStreamState
+    setStreamState,
+    updateToolBlock
   } = useChatStore(makeLineId);
   const { modalOpen, modalElement, handleCommand } = useModalManager(appendLines, () => textareaRef.current?.focus());
 
@@ -690,6 +767,7 @@ export function App(): JSX.Element {
   const startStreamingResponder = useStreamingResponder(
     appendLines,
     appendToolBlock,
+    updateToolBlock,
     setResponderWordCount,
     setStreamState,
     streamRunId,
@@ -802,4 +880,28 @@ function buildOsc52(text: string): string {
     return `\u001bPtmux;\u001b${osc52}\u001b\\`;
   }
   return osc52;
+}
+
+async function streamShellOutput(
+  plan: ShellPlan,
+  blockId: string,
+  runId: number,
+  updateToolBlock: (id: string, mutate: (block: ToolBlock) => ToolBlock) => void,
+  streamRunId: RefHandle<number>,
+  mountedRef: RefHandle<boolean>
+): Promise<void> {
+  for (const line of plan.output) {
+    if (!mountedRef.current || streamRunId.current !== runId) {
+      return;
+    }
+    updateToolBlock(blockId, (block) => ({
+      ...block,
+      lines: [...block.lines, `    ${line}`],
+      streaming: true
+    }));
+    await sleep(secureRandomBetween(6, 22));
+  }
+  if (mountedRef.current && streamRunId.current === runId) {
+    updateToolBlock(blockId, (block) => ({ ...block, streaming: false }));
+  }
 }

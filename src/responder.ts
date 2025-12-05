@@ -3,6 +3,15 @@ import { secureRandomBetween } from "./random";
 export interface ToolCallBlock {
   readonly lines: string[];
   readonly isBatch: boolean;
+  readonly scrollable?: boolean;
+  readonly maxHeight?: number;
+  readonly streaming?: boolean;
+}
+
+export interface ShellPlan {
+  readonly command: string;
+  readonly output: string[];
+  readonly maxHeight: number;
 }
 
 const OPENERS = [
@@ -120,4 +129,56 @@ function formatToolHeader(description: string): string {
 function randomToolKind(): ToolKind {
   const kinds: ToolKind[] = ["ReadFile", "Glob", "SearchInFile"];
   return kinds[secureRandomBetween(0, kinds.length - 1)];
+}
+
+const SHELL_COMMANDS = ['npm run test', 'find . -name "*.ts"', "git status --short", "ls -la", "npm run lint"];
+
+export function maybeBuildShellPlan(): ShellPlan | null {
+  if (secureRandomBetween(0, 5) !== 0) {
+    return null;
+  }
+  const command = pick(SHELL_COMMANDS);
+  const total = secureRandomBetween(24, 80);
+  const output: string[] = [];
+  for (let index = 0; index < total; index += 1) {
+    if (command.startsWith("find")) {
+      output.push(`./src/${pick(["app.tsx", "history.ts", "modalShell.tsx", "responder.ts"])}:${secureRandomBetween(1, 200)}`);
+    } else if (command.startsWith("npm run test")) {
+      output.push(randomTestLine(index));
+    } else if (command === "npm run lint") {
+      output.push(randomLintLine(index));
+    } else if (command === "git status --short") {
+      output.push(`${pick(["M", "A", "??"])} ${pick(["src/app.tsx", "src/responder.ts", "src/modalShell.tsx"])}`);
+    } else {
+      output.push(randomLsLine(index));
+    }
+  }
+  return { command, output, maxHeight: 20 };
+}
+
+function randomTestLine(index: number): string {
+  const parts = [
+    ` PASS  src/${pick(["app.test.ts", "history.test.ts", "suggestions.test.ts"])}`,
+    `  ✓ scenario ${index + 1} ${pick(["(2 ms)", "(4 ms)", "(1 ms)"])}`,
+    `  ✓ renders tool block ${index % 5} ${pick(["(snapshot)", "(dom)", "(cli)"])}`,
+    `  ✓ streaming chunk ${index}`
+  ];
+  return pick(parts);
+}
+
+function randomLintLine(index: number): string {
+  return [
+    `src/${pick(["app.tsx", "responder.ts", "modalShell.tsx"])}:${secureRandomBetween(10, 200)}:${secureRandomBetween(2, 80)}  warning  ${pick([
+      "Unexpected console statement",
+      "Trailing spaces not allowed",
+      "Function has a complexity of 18"
+    ])}`,
+    `✖ ${index + 1} problem (0 errors, ${secureRandomBetween(1, 2)} warnings)`
+  ][secureRandomBetween(0, 1)];
+}
+
+function randomLsLine(index: number): string {
+  const size = secureRandomBetween(1, 4096);
+  const name = pick(["src", "scripts", "node_modules", "README.md", `file-${index}.ts`]);
+  return `-rw-r--r--  1 user  staff  ${size.toString().padStart(6, " ")} Dec  4 12:${(index % 60).toString().padStart(2, "0")} ${name}`;
 }
