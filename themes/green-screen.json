@@ -3,11 +3,11 @@
   "slug": "green-screen",
   "kind": "dark",
   "colors": {
-    "background": "#1d2a1d",
+    "background": "#000000",
     "panel": {
-      "bg": "#1d2a1d",
+      "bg": "#000000",
       "border": "#6a9955",
-      "headerBg": "#1d2a1d",
+      "headerBg": "#000000",
       "headerFg": "#6a9955"
     },
     "text": {

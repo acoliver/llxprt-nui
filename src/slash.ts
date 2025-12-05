@@ -147,8 +147,8 @@ function resolvePath(parts: string[]): SlashNode[] {
   if (parts.length === 0) {
     return SLASH_COMMANDS;
   }
-  if (parts.length === 1 && parts[0] === "theme") {
-    return themeNodes.length > 0 ? themeNodes : [];
+  if (parts.length >= 1 && parts[0] === "theme") {
+    return parts.length === 1 ? themeNodes : [];
   }
   let current: SlashNode[] = SLASH_COMMANDS;
   for (const part of parts) {
