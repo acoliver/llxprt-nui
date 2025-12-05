@@ -6,7 +6,7 @@ interface SlashNode {
 
 const SLASH_COMMANDS: SlashNode[] = [
   { name: "about", description: "show version info" },
-  { name: "auth", description: "toggle OAuth enablement for providers (gemini, qwen, anthropic)" },
+  { name: "auth", description: "Open auth dialog or toggle OAuth enablement for providers (gemini, qwen, anthropic)" },
   { name: "bug", description: "submit a bug report" },
   { name: "chat", description: "Manage conversation checkpoints" },
   { name: "clear", description: "clear the screen and conversation history" },
@@ -19,10 +19,12 @@ const SLASH_COMMANDS: SlashNode[] = [
   { name: "help", description: "for help on LLxprt Code" },
   { name: "ide", description: "manage IDE integration" },
   { name: "init", description: "Analyzes the project and creates a tailored LLXPRT.md file." },
+  { name: "model", description: "Open model picker" },
   { name: "mcp", description: "list configured MCP servers and tools, or authenticate with OAuth-enabled servers" },
   { name: "memory", description: "Commands for interacting with memory." },
   { name: "privacy", description: "view Gemini API privacy disclosure and terms" },
   { name: "logging", description: "manage conversation logging settings" },
+  { name: "provider", description: "Open provider picker" },
   { name: "quit", description: "exit the cli" },
   {
     name: "stats",

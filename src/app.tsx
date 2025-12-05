@@ -1,12 +1,13 @@
 import { appendFileSync } from "node:fs";
 import path from "node:path";
-import { randomInt } from "node:crypto";
 import type { KeyBinding, KeyEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { Dispatch, JSX, RefObject, SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { extractMentionQuery, findMentionRange, getSuggestions, MAX_SUGGESTION_COUNT } from "./suggestions";
-import { extractSlashContext, getSlashSuggestions } from "./slash";
+import { MAX_SUGGESTION_COUNT } from "./suggestions";
+import { useCompletionManager, type CompletionSuggestion } from "./completions";
+import { buildResponderLine, countWords, secureRandomBetween } from "./responder";
+import { useModalManager } from "./modalManager";
 type Role = "user" | "responder";
 type StreamState = "idle" | "streaming";
 interface ChatLine {
@@ -26,7 +27,6 @@ const STREAM_MIN_LINES = 5;
 const STREAM_MAX_LINES = 800;
 const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
-const SLASH_SUGGESTION_LIMIT = 50;
 const KEY_LOG_PATH = path.resolve(process.cwd(), "key-events.log");
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
@@ -38,30 +38,6 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "kpenter", action: "submit" },
   { name: "kpplus", action: "submit" },
   { name: "linefeed", action: "newline" }
-];
-const OPENERS = [
-  "Camus shrugs at the sky,",
-  "Nietzsche laughs in the dark,",
-  "The void hums quietly while",
-  "A hedonist clinks a glass because",
-  "Sisyphus pauses mid-push as",
-  "Dionysus sings over static and"
-];
-const DRIVERS = [
-  "meaning is negotiated then forgotten,",
-  "willpower tastes like rusted metal,",
-  "pleasure is an act of rebellion,",
-  "every rule is a rumor,",
-  "the abyss wants a conversation,",
-  "time is a joke with a long punchline,"
-];
-const SPINS = [
-  "so I dance anyway.",
-  "yet we still buy coffee at dawn.",
-  "and the night market keeps buzzing.",
-  "because absurd joy is cheaper than despair.",
-  "while the sea keeps no memory.",
-  "so breath becomes a quiet manifesto."
 ];
 function useChatStore(makeLineId: () => string) {
   const [lines, setLines] = useState<ChatLine[]>([]);
@@ -132,7 +108,8 @@ function useInputManager(
   startStreamingResponder: () => Promise<void>,
   refreshCompletion: () => void,
   clearCompletion: () => void,
-  applyCompletion: () => void
+  applyCompletion: () => void,
+  handleCommand: (command: string) => boolean
 ) {
   const [inputLineCount, setInputLineCount] = useState(MIN_INPUT_LINES);
 
@@ -155,7 +132,16 @@ function useInputManager(
     if (raw.trim().length === 0) {
       return;
     }
-    if (raw.trim() === "/quit") {
+    const trimmed = raw.trim();
+    if (handleCommand(trimmed)) {
+      editor.clear();
+      setInputLineCount(MIN_INPUT_LINES);
+      setAutoFollow(true);
+      clearCompletion();
+      editor.submit();
+      return;
+    }
+    if (trimmed === "/quit") {
       process.exit(0);
     }
     const userLines = raw.split(/\r?\n/);
@@ -167,7 +153,7 @@ function useInputManager(
     clearCompletion();
     editor.submit();
     void startStreamingResponder();
-  }, [appendLines, clearCompletion, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
+  }, [appendLines, clearCompletion, handleCommand, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
   const handleTabComplete = useCallback(
     () => {
@@ -256,141 +242,6 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
   });
 
   return { autoFollow, setAutoFollow, scrollBy, jumpToBottom, handleContentChange, handleMouseScroll };
-}
-
-type CompletionMode = "none" | "mention" | "slash";
-
-interface CompletionSuggestion {
-  value: string;
-  description?: string;
-  insertText: string;
-  mode: Exclude<CompletionMode, "none">;
-  displayPrefix?: boolean;
-  hasChildren?: boolean;
-}
-
-function buildSlashCompletions(parts: string[]): CompletionSuggestion[] {
-  const isRoot = parts.length <= 1;
-  return getSlashSuggestions(parts, SLASH_SUGGESTION_LIMIT).map((suggestion) => ({
-    value: suggestion.value,
-    description: suggestion.description,
-    insertText: suggestion.fullPath,
-    mode: "slash" as const,
-    displayPrefix: isRoot,
-    hasChildren: suggestion.hasChildren
-  }));
-}
-
-function buildMentionCompletions(query: string): CompletionSuggestion[] {
-  return getSuggestions(query, MAX_SUGGESTION_COUNT).map((value) => ({
-    value,
-    insertText: value,
-    mode: "mention" as const
-  }));
-}
-
-function applyMentionCompletion(editor: TextareaRenderable, suggestion: CompletionSuggestion): void {
-  const range = findMentionRange(editor.plainText, editor.cursorOffset);
-  if (!range) {
-    return;
-  }
-  const before = editor.plainText.slice(0, range.start);
-  const after = editor.plainText.slice(range.end);
-  const completion = `${suggestion.insertText} `;
-  const nextText = `${before}${completion}${after}`;
-  editor.setText(nextText);
-  editor.cursorOffset = (before + completion).length;
-}
-
-function applySlashCompletion(
-  editor: TextareaRenderable,
-  context: { start: number; end: number },
-  suggestion: CompletionSuggestion
-): void {
-  const before = editor.plainText.slice(0, context.start);
-  const after = editor.plainText.slice(context.end);
-  const completion = `${suggestion.insertText} `;
-  const nextText = `${before}${completion}${after}`;
-  editor.setText(nextText);
-  editor.cursorOffset = (before + completion).length;
-}
-function useCompletionManager(textareaRef: RefObject<TextareaRenderable>) {
-  const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const slashContext = useRef<{ start: number; end: number } | null>(null);
-  const reset = useCallback(() => {
-    slashContext.current = null;
-    setSuggestions([]);
-    setSelectedIndex(0);
-  }, []);
-  const refresh = useCallback(() => {
-    const editor = textareaRef.current;
-    if (!editor) {
-      return;
-    }
-    const text = editor.plainText;
-    const cursor = editor.cursorOffset;
-    const slash = extractSlashContext(text, cursor);
-    if (slash) {
-      slashContext.current = { start: slash.start, end: slash.end };
-      setSuggestions(buildSlashCompletions(slash.parts));
-      setSelectedIndex(0);
-      return;
-    }
-    const mention = extractMentionQuery(text, cursor);
-    if (mention !== null) {
-      slashContext.current = null;
-      setSuggestions(buildMentionCompletions(mention));
-      setSelectedIndex(0);
-      return;
-    }
-    reset();
-  }, [reset, textareaRef]);
-  const moveSelection = useCallback(
-    (delta: number) => {
-      if (suggestions.length === 0) {
-        return;
-      }
-      setSelectedIndex((prev) => {
-        const next = prev + delta;
-        if (next < 0) {
-          return 0;
-        }
-        if (next >= suggestions.length) {
-          return suggestions.length - 1;
-        }
-        return next;
-      });
-    },
-    [suggestions.length]
-  );
-  const applySelection = useCallback(() => {
-    const editor = textareaRef.current;
-    if (!editor) {
-      return;
-    }
-    const current = suggestions[selectedIndex];
-    if (!current) {
-      return;
-    }
-    if (current.mode === "mention") {
-      applyMentionCompletion(editor, current);
-      return;
-    }
-    if (current.mode === "slash") {
-      if (!slashContext.current) {
-        return;
-      }
-      applySlashCompletion(editor, slashContext.current, current);
-      slashContext.current = null;
-    }
-    if (current.mode === "slash" && current.hasChildren) {
-      refresh();
-    } else {
-      reset();
-    }
-  }, [refresh, reset, selectedIndex, suggestions, textareaRef]);
-  return { suggestions, selectedIndex, refresh, clear: reset, moveSelection, applySelection };
 }
 
 interface ChatLayoutProps {
@@ -623,13 +474,13 @@ function isEnterKey(key: KeyEvent): boolean {
       key.sequence === "\n"
   );
 }
-function useEnterSubmit(onSubmit: () => void): void {
+function useEnterSubmit(onSubmit: () => void, isBlocked: boolean): void {
   useKeyboard((key) => {
     const isEnterLike = isEnterKey(key);
     if (isEnterLike) {
       logEnterKey(key);
     }
-    if (isEnterLike) {
+    if (isEnterLike && !isBlocked) {
       const hasModifier = key.shift || key.ctrl || key.meta || key.option || key.super;
       if (!hasModifier) {
         key.preventDefault?.();
@@ -725,6 +576,7 @@ export function App(): JSX.Element {
 
   const { lines, appendLines, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } =
     useChatStore(makeLineId);
+  const { modalOpen, modalElement, handleCommand } = useModalManager(appendLines);
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
 
@@ -747,54 +599,45 @@ export function App(): JSX.Element {
     startStreamingResponder,
     refreshCompletion,
     clearCompletion,
-    applySelection
+    applySelection,
+    handleCommand
   );
 
   const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
 
-  useEnterSubmit(handleSubmit);
+  useEnterSubmit(handleSubmit, modalOpen);
   useKeyPressLogging();
-  useSuggestionKeybindings(suggestions.length, moveSelection, handleTabComplete, cancelStreaming);
+  useSuggestionKeybindings(modalOpen ? 0 : suggestions.length, moveSelection, handleTabComplete, cancelStreaming);
 
   return (
-    <ChatLayout
-      headerText={HEADER_TEXT}
-      lines={lines}
-      scrollRef={scrollRef}
-      autoFollow={autoFollow}
-      textareaRef={textareaRef}
-      inputLineCount={inputLineCount}
-      enforceInputLineBounds={enforceInputLineBounds}
-      handleSubmit={handleSubmit}
-      statusLabel={statusLabel}
-      promptCount={promptCount}
-      responderWordCount={responderWordCount}
-      streamState={streamState}
-      onScroll={handleMouseScroll}
-      suggestions={suggestions}
-      selectedSuggestion={selectedIndex}
-    />
+    <>
+      <ChatLayout
+        headerText={HEADER_TEXT}
+        lines={lines}
+        scrollRef={scrollRef}
+        autoFollow={autoFollow}
+        textareaRef={textareaRef}
+        inputLineCount={inputLineCount}
+        enforceInputLineBounds={enforceInputLineBounds}
+        handleSubmit={handleSubmit}
+        statusLabel={statusLabel}
+        promptCount={promptCount}
+        responderWordCount={responderWordCount}
+        streamState={streamState}
+        onScroll={handleMouseScroll}
+        suggestions={suggestions}
+        selectedSuggestion={selectedIndex}
+      />
+      {modalElement}
+    </>
   );
 }
 
 function clampInputLines(value: number): number {
   return Math.min(MAX_INPUT_LINES, Math.max(MIN_INPUT_LINES, value));
 }
-function secureRandomBetween(min: number, max: number): number {
-  return randomInt(min, max + 1);
-}
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-function buildResponderLine(): string {
-  return `${pick(OPENERS)} ${pick(DRIVERS)} ${pick(SPINS)}`;
-}
-function pick<T>(items: readonly T[]): T {
-  return items[secureRandomBetween(0, items.length - 1)];
-}
-function countWords(text: string): number {
-  const matches = text.trim().match(/\S+/g);
-  return matches ? matches.length : 0;
 }
