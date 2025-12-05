@@ -576,7 +576,7 @@ export function App(): JSX.Element {
 
   const { lines, appendLines, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } =
     useChatStore(makeLineId);
-  const { modalOpen, modalElement, handleCommand } = useModalManager(appendLines);
+  const { modalOpen, modalElement, handleCommand } = useModalManager(appendLines, () => textareaRef.current?.focus());
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
 

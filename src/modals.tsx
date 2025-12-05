@@ -241,16 +241,27 @@ function useSearchSelectKeys(
 }
 
 function renderSearchGrid(items: SearchItem[], pageStart: number, selectedIndex: number): JSX.Element[] {
-  return chunkItems(items, GRID_COLUMNS).map((row, rowIndex) => (
+  const rows = chunkItems(items, GRID_COLUMNS);
+  const columnWidths = Array.from({ length: GRID_COLUMNS }, (_, col) =>
+    Math.max(
+      0,
+      ...rows.map((row) => (row[col] ? row[col].label.length + 2 : 0)) // bullet + space
+    )
+  );
+
+  return rows.map((row, rowIndex) => (
     <box key={`row-${rowIndex}`} flexDirection="row" style={{ gap: 2 }}>
-      {row.map((item, index) => renderSearchItem(item, pageStart + rowIndex * GRID_COLUMNS + index, selectedIndex))}
+      {row.map((item, index) =>
+        renderSearchItem(item, pageStart + rowIndex * GRID_COLUMNS + index, selectedIndex, columnWidths[index] ?? item.label.length + 2)
+      )}
     </box>
   ));
 }
 
-function renderSearchItem(item: SearchItem, absoluteIndex: number, selectedIndex: number): JSX.Element {
+function renderSearchItem(item: SearchItem, absoluteIndex: number, selectedIndex: number, width: number): JSX.Element {
   const bullet = absoluteIndex === selectedIndex ? "●" : "○";
-  return <text key={item.id}>{`${bullet} ${item.label}`}</text>;
+  const label = `${bullet} ${item.label}`.padEnd(width + 2, " ");
+  return <text key={item.id}>{label}</text>;
 }
 
 function renderAuthOptions(options: AuthOption[], selectedIndex: number): JSX.Element[] {

@@ -11,11 +11,15 @@ const MODAL_COMMANDS: Record<string, ModalState["type"]> = {
 };
 
 export function useModalManager(
-  appendLines: (role: "user" | "responder", textLines: string[]) => void
+  appendLines: (role: "user" | "responder", textLines: string[]) => void,
+  focusInput: () => void
 ): { modalOpen: boolean; modalElement: JSX.Element | null; handleCommand: (command: string) => boolean } {
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [authOptions, setAuthOptions] = useState<AuthOption[]>(AUTH_DEFAULTS);
-  const closeModal = useCallback(() => setModal({ type: "none" }), []);
+  const closeModal = useCallback(() => {
+    setModal({ type: "none" });
+    focusInput();
+  }, [focusInput]);
   const handleModelSelect = useCallback(
     (item: SearchItem) => {
       appendLines("responder", [`Selected model: ${item.label}`]);
