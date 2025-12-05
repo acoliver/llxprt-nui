@@ -792,7 +792,6 @@ function useSelectionClipboard(renderer: unknown): () => void {
     void clipboard.write(text).catch(() => {
       return;
     });
-    (renderer as { clearSelection?: () => void })?.clearSelection?.();
   }, [renderer]);
 }
 
