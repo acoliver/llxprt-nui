@@ -22,6 +22,7 @@
   "dependencies": {
     "@opentui/core": "^0.1.56",
     "@opentui/react": "^0.1.56",
+    "clipboardy": "^4.0.0",
     "react": "^19.2.1"
   },
   "devDependencies": {

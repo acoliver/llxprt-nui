@@ -2,8 +2,9 @@ import { appendFileSync } from "node:fs";
 import path from "node:path";
 import type { KeyBinding, KeyEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { Dispatch, JSX, RefObject, SetStateAction } from "react";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import clipboard from "clipboardy";
 import { MAX_SUGGESTION_COUNT } from "./suggestions";
 import { useCompletionManager, type CompletionSuggestion } from "./completions";
 import { buildResponderLine, buildThinkingLine, countWords, maybeBuildToolCalls } from "./responder";
@@ -301,6 +302,7 @@ interface ChatLayoutProps {
   readonly responderWordCount: number;
   readonly streamState: StreamState;
   readonly onScroll: (event: { type: string }) => void;
+  readonly onMouseUp?: () => void;
   readonly suggestions: CompletionSuggestion[];
   readonly selectedSuggestion: number;
 }
@@ -477,7 +479,7 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
   const textareaHeight = Math.max(3, containerHeight - 2);
 
   return (
-    <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
+    <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }} onMouseUp={props.onMouseUp}>
       <HeaderBar text={props.headerText} />
       <ScrollbackView
         lines={props.lines}
@@ -657,6 +659,7 @@ export function App(): JSX.Element {
   const textareaRef = useRef<TextareaRenderable>(null);
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
+  const renderer = useRenderer();
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } =
     useCompletionManager(textareaRef);
   const { record: recordHistory, handleHistoryKey } = usePromptHistory(textareaRef);
@@ -712,6 +715,7 @@ export function App(): JSX.Element {
   );
 
   const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
+  const handleMouseUp = useSelectionClipboard(renderer);
 
   useEnterSubmit(handleSubmit, modalOpen);
   useKeyPressLogging();
@@ -754,6 +758,7 @@ export function App(): JSX.Element {
         responderWordCount={responderWordCount}
         streamState={streamState}
         onScroll={handleMouseScroll}
+        onMouseUp={handleMouseUp}
         suggestions={suggestions}
         selectedSuggestion={selectedIndex}
       />
@@ -769,4 +774,33 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function useSelectionClipboard(renderer: unknown): () => void {
+  return useCallback(() => {
+    const selection = (renderer as { getSelection?: () => { getSelectedText?: () => string | null } | null })?.getSelection?.();
+    const text = selection?.getSelectedText?.() ?? "";
+    if (!text) {
+      return;
+    }
+    const osc = buildOsc52(text);
+    try {
+      (renderer as { writeOut?: (chunk: string) => void })?.writeOut?.(osc);
+    } catch {
+      // ignore renderer write failures
+    }
+    void clipboard.write(text).catch(() => {
+      return;
+    });
+    (renderer as { clearSelection?: () => void })?.clearSelection?.();
+  }, [renderer]);
+}
+
+function buildOsc52(text: string): string {
+  const base64 = Buffer.from(text).toString("base64");
+  const osc52 = `\u001b]52;c;${base64}\u0007`;
+  if (process.env.TMUX) {
+    return `\u001bPtmux;\u001b${osc52}\u001b\\`;
+  }
+  return osc52;
 }
