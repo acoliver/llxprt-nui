@@ -36,6 +36,19 @@ export function buildResponderLine(): string {
   return `${pick(OPENERS)} ${pick(DRIVERS)} ${pick(SPINS)}`;
 }
 
+const THOUGHTS = [
+  "I should tell the user about the abyss.",
+  "Perhaps hedonism is the answer.",
+  "Maybe the code hides a better metaphor.",
+  "I'd like to learn more about the codebase; maybe I'll send a tool call.",
+  "Is meaning just another branch to merge?",
+  "Should I warn them the void has opinions?"
+] as const;
+
+export function buildThinkingLine(): string {
+  return pick(THOUGHTS);
+}
+
 export function countWords(text: string): number {
   const matches = text.trim().match(/\S+/g);
   return matches ? matches.length : 0;

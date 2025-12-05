@@ -6,11 +6,11 @@ import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MAX_SUGGESTION_COUNT } from "./suggestions";
 import { useCompletionManager, type CompletionSuggestion } from "./completions";
-import { buildResponderLine, countWords, maybeBuildToolCalls } from "./responder";
+import { buildResponderLine, buildThinkingLine, countWords, maybeBuildToolCalls } from "./responder";
 import { secureRandomBetween } from "./random";
 import { useModalManager } from "./modalManager";
 import { usePromptHistory } from "./history";
-type Role = "user" | "responder";
+type Role = "user" | "responder" | "thinking";
 type StreamState = "idle" | "streaming";
 interface ChatLine {
   id: string;
@@ -115,6 +115,14 @@ function useStreamingResponder(
     for (let index = 0; index < total; index += 1) {
       if (!mountedRef.current || streamRunId.current !== currentRun) {
         return;
+      }
+      if (secureRandomBetween(0, 4) === 0) {
+        const thoughtCount = secureRandomBetween(1, 2);
+        for (let t = 0; t < thoughtCount; t += 1) {
+          const thought = buildThinkingLine();
+          appendLines("thinking", [thought]);
+          setResponderWordCount((count) => count + countWords(thought));
+        }
       }
       const toolBlock = maybeBuildToolCalls();
       if (toolBlock) {
@@ -496,12 +504,22 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
 }
 
 function renderChatLine(line: ChatLine): JSX.Element {
-  const color = line.role === "user" ? "#7dd3fc" : "#facc15";
+  const color = roleColor(line.role);
   return (
     <text key={line.id} fg={color}>
       [{line.role}] {line.text}
     </text>
   );
+}
+
+function roleColor(role: Role): string {
+  if (role === "user") {
+    return "#7dd3fc";
+  }
+  if (role === "thinking") {
+    return "#94a3b8";
+  }
+  return "#facc15";
 }
 
 function renderToolBlock(block: ToolBlock): JSX.Element {
