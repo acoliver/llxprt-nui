@@ -8,6 +8,7 @@ import { MAX_SUGGESTION_COUNT } from "./suggestions";
 import { useCompletionManager, type CompletionSuggestion } from "./completions";
 import { buildResponderLine, countWords, secureRandomBetween } from "./responder";
 import { useModalManager } from "./modalManager";
+import { usePromptHistory } from "./history";
 type Role = "user" | "responder";
 type StreamState = "idle" | "streaming";
 interface ChatLine {
@@ -109,7 +110,8 @@ function useInputManager(
   refreshCompletion: () => void,
   clearCompletion: () => void,
   applyCompletion: () => void,
-  handleCommand: (command: string) => boolean
+  handleCommand: (command: string) => boolean,
+  recordHistory: (prompt: string) => void
 ) {
   const [inputLineCount, setInputLineCount] = useState(MIN_INPUT_LINES);
 
@@ -134,6 +136,7 @@ function useInputManager(
     }
     const trimmed = raw.trim();
     if (handleCommand(trimmed)) {
+      recordHistory(raw);
       editor.clear();
       setInputLineCount(MIN_INPUT_LINES);
       setAutoFollow(true);
@@ -144,6 +147,7 @@ function useInputManager(
     if (trimmed === "/quit") {
       process.exit(0);
     }
+    recordHistory(raw);
     const userLines = raw.split(/\r?\n/);
     appendLines("user", userLines);
     setPromptCount((count) => count + 1);
@@ -569,6 +573,7 @@ export function App(): JSX.Element {
   const mountedRef = useRef(true);
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } =
     useCompletionManager(textareaRef);
+  const { record: recordHistory, handleHistoryKey } = usePromptHistory(textareaRef);
 
   useFocusAndMount(textareaRef, mountedRef);
 
@@ -600,7 +605,8 @@ export function App(): JSX.Element {
     refreshCompletion,
     clearCompletion,
     applySelection,
-    handleCommand
+    handleCommand,
+    recordHistory
   );
 
   const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
@@ -608,6 +614,17 @@ export function App(): JSX.Element {
   useEnterSubmit(handleSubmit, modalOpen);
   useKeyPressLogging();
   useSuggestionKeybindings(modalOpen ? 0 : suggestions.length, moveSelection, handleTabComplete, cancelStreaming);
+  useKeyboard((key) => {
+    if (modalOpen || suggestions.length > 0 || key.eventType !== "press") {
+      return;
+    }
+    if (key.name === "up" || key.name === "down") {
+      const handled = handleHistoryKey(key.name);
+      if (handled) {
+        key.preventDefault?.();
+      }
+    }
+  });
 
   return (
     <>
