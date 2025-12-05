@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { secureRandomBetween } from "./random";
 
 const OPENERS = [
   "Camus shrugs at the sky,",
@@ -27,10 +27,6 @@ const SPINS = [
   "so breath becomes a quiet manifesto."
 ] as const;
 
-export function secureRandomBetween(min: number, max: number): number {
-  return randomInt(min, max + 1);
-}
-
 export function buildResponderLine(): string {
   return `${pick(OPENERS)} ${pick(DRIVERS)} ${pick(SPINS)}`;
 }
@@ -42,4 +38,68 @@ export function countWords(text: string): number {
 
 function pick<T>(items: readonly T[]): T {
   return items[secureRandomBetween(0, items.length - 1)];
+}
+
+type ToolKind = "ReadFile" | "Glob" | "SearchInFile";
+
+const SAMPLE_FILES = [
+  "src/app.tsx",
+  "src/modalShell.tsx",
+  "src/searchSelectModal.tsx",
+  "src/history.ts",
+  "scripts/check-limits.ts"
+];
+
+const SAMPLE_PATTERNS = ["useState", "Modal", "stream", "return", "export function", "const "];
+
+export function maybeBuildToolCalls(): string[] | null {
+  if (secureRandomBetween(0, 6) !== 0) {
+    return null;
+  }
+  const parallel = secureRandomBetween(0, 1) === 1;
+  const count = secureRandomBetween(1, 5);
+  const calls = Array.from({ length: count }, () => buildToolCallLines(randomToolKind())).flat();
+  if (parallel) {
+    return [`[tool batch] ${count} calls`, ...calls.map((line) => `  ${line}`)];
+  }
+  return calls;
+}
+
+function buildToolCallLines(kind: ToolKind): string[] {
+  if (kind === "ReadFile") {
+    const file = pick(SAMPLE_FILES);
+    const start = secureRandomBetween(3, 40);
+    const end = start + secureRandomBetween(2, 6);
+    return [
+      formatToolHeader(`ReadFile ${file} ${start}-${end}`),
+      `    ${start}: // simulated code line`,
+      `    ${start + 1}: // more simulated code`,
+      `    ${end}: // eof snippet`
+    ];
+  }
+  if (kind === "Glob") {
+    const pattern = pick(["./*.ts", "./src/*.tsx", "./**/*.ts"]);
+    return [
+      formatToolHeader(`Glob ${pattern}`),
+      `    -> ${pick(SAMPLE_FILES)}`,
+      `    -> ${pick(SAMPLE_FILES)}`
+    ];
+  }
+  const file = pick(SAMPLE_FILES);
+  const pattern = pick(SAMPLE_PATTERNS);
+  const first = secureRandomBetween(5, 60);
+  return [
+    formatToolHeader(`SearchInFile ${file} "${pattern}"`),
+    `    ${first}: match: ${pattern}()`,
+    `    ${first + secureRandomBetween(1, 10)}: match: ${pattern} // more`
+  ];
+}
+
+function formatToolHeader(description: string): string {
+  return `[tool] ${description}`;
+}
+
+function randomToolKind(): ToolKind {
+  const kinds: ToolKind[] = ["ReadFile", "Glob", "SearchInFile"];
+  return kinds[secureRandomBetween(0, kinds.length - 1)];
 }

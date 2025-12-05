@@ -6,7 +6,8 @@ import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MAX_SUGGESTION_COUNT } from "./suggestions";
 import { useCompletionManager, type CompletionSuggestion } from "./completions";
-import { buildResponderLine, countWords, secureRandomBetween } from "./responder";
+import { buildResponderLine, countWords, maybeBuildToolCalls } from "./responder";
+import { secureRandomBetween } from "./random";
 import { useModalManager } from "./modalManager";
 import { usePromptHistory } from "./history";
 type Role = "user" | "responder";
@@ -89,6 +90,10 @@ function useStreamingResponder(
     for (let index = 0; index < total; index += 1) {
       if (!mountedRef.current || streamRunId.current !== currentRun) {
         return;
+      }
+      const toolLines = maybeBuildToolCalls();
+      if (toolLines) {
+        appendLines("responder", toolLines);
       }
       const line = buildResponderLine();
       appendLines("responder", [line]);
