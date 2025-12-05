@@ -18,6 +18,10 @@ import {
 import { secureRandomBetween } from "./random";
 import { useModalManager } from "./modalManager";
 import { usePromptHistory } from "./history";
+import type { ThemeDefinition } from "./theme";
+import { findTheme } from "./theme";
+import { useThemeManager } from "./themeManager";
+import { setThemeSuggestions } from "./slash";
 type Role = "user" | "responder" | "thinking";
 type StreamState = "idle" | "streaming";
 interface ChatLine {
@@ -352,6 +356,7 @@ interface ChatLayoutProps {
   readonly onMouseUp?: () => void;
   readonly suggestions: CompletionSuggestion[];
   readonly selectedSuggestion: number;
+  readonly theme: ThemeDefinition;
 }
 
 interface InputAreaProps {
@@ -360,18 +365,21 @@ interface InputAreaProps {
   readonly textareaHeight: number;
   readonly handleSubmit: () => void;
   readonly enforceInputLineBounds: () => void;
+  readonly theme: ThemeDefinition;
 }
 
 interface SuggestionPanelProps {
   readonly suggestions: CompletionSuggestion[];
   readonly selectedIndex: number;
+  readonly theme: ThemeDefinition;
 }
 
 interface ScrollbackProps {
-  readonly lines: ChatLine[];
+  readonly lines: (ChatLine | ToolBlock)[];
   readonly scrollRef: RefObject<ScrollBoxRenderable>;
   readonly autoFollow: boolean;
   readonly onScroll: (event: { type: string }) => void;
+  readonly theme: ThemeDefinition;
 }
 
 interface StatusBarProps {
@@ -379,12 +387,22 @@ interface StatusBarProps {
   readonly promptCount: number;
   readonly responderWordCount: number;
   readonly streamState: StreamState;
+  readonly theme: ThemeDefinition;
 }
 
-function HeaderBar({ text }: { readonly text: string }): JSX.Element {
+function HeaderBar({ text, theme }: { readonly text: string; readonly theme: ThemeDefinition }): JSX.Element {
   return (
-    <box style={{ minHeight: 1, maxHeight: 5, border: true, padding: 1 }}>
-      <text>{text}</text>
+    <box
+      style={{
+        minHeight: 1,
+        maxHeight: 5,
+        border: true,
+        padding: 1,
+        borderColor: theme.colors.panel.border,
+        backgroundColor: theme.colors.panel.headerBg ?? theme.colors.panel.bg
+      }}
+    >
+      <text fg={theme.colors.panel.headerFg ?? theme.colors.text.primary}>{text}</text>
     </box>
   );
 }
@@ -393,7 +411,16 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
   return (
     <scrollbox
       ref={props.scrollRef}
-      style={{ flexGrow: 1, border: true, paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }}
+      style={{
+        flexGrow: 1,
+        border: true,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        borderColor: props.theme.colors.panel.border,
+        backgroundColor: props.theme.colors.panel.bg
+      }}
       contentOptions={{ paddingLeft: 2, paddingRight: 2 }}
       scrollX={false}
       stickyScroll={props.autoFollow}
@@ -404,7 +431,7 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
       >
         <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
           {props.lines.map((entry) =>
-            entry.kind === "line" ? renderChatLine(entry) : renderToolBlock(entry)
+            entry.kind === "line" ? renderChatLine(entry, props.theme) : renderToolBlock(entry, props.theme)
           )}
         </box>
       </scrollbox>
@@ -424,7 +451,9 @@ function InputArea(props: InputAreaProps): JSX.Element {
         paddingLeft: 0,
         paddingRight: 0,
         flexDirection: "column",
-        gap: 0
+        gap: 0,
+        borderColor: props.theme.colors.panel.border,
+        backgroundColor: props.theme.colors.panel.bg
       }}
     >
       <textarea
@@ -444,7 +473,10 @@ function InputArea(props: InputAreaProps): JSX.Element {
           paddingLeft: 1,
           paddingRight: 1,
           paddingTop: 0,
-          paddingBottom: 0
+          paddingBottom: 0,
+          fg: props.theme.colors.input.fg,
+          bg: props.theme.colors.input.bg,
+          borderColor: props.theme.colors.input.border
         }}
       />
     </box>
@@ -482,9 +514,9 @@ function SuggestionPanel(props: SuggestionPanelProps): JSX.Element | null {
       }}
     >
       {pageItems.map((item, index) =>
-        renderSuggestionRow(item, pageStart + index, props.selectedIndex, maxLabel)
+        renderSuggestionRow(item, pageStart + index, props.selectedIndex, maxLabel, props.theme)
       )}
-      {indicatorNeeded ? <text fg="#94a3b8">{`▼ page ${pageIndex + 1}/${totalPages} ▲`}</text> : null}
+      {indicatorNeeded ? <text fg={props.theme.colors.text.muted}>{`▼ page ${pageIndex + 1}/${totalPages} ▲`}</text> : null}
     </box>
   );
 }
@@ -493,7 +525,8 @@ function renderSuggestionRow(
   item: CompletionSuggestion,
   globalIndex: number,
   selectedIndex: number,
-  maxLabel: number
+  maxLabel: number,
+  theme: ThemeDefinition
 ): JSX.Element {
   const isSelected = globalIndex === selectedIndex;
   const prefix = item.mode === "slash" && item.displayPrefix !== false ? "/" : "";
@@ -501,7 +534,11 @@ function renderSuggestionRow(
   const description = item.description ? ` ${item.description}` : "";
   const rowText = `${label}${description}`;
   return (
-    <text key={`suggestion-${globalIndex}`} bg={isSelected ? "#334155" : undefined} fg={isSelected ? "#a3e635" : undefined}>
+    <text
+      key={`suggestion-${globalIndex}`}
+      bg={isSelected ? theme.colors.accent.primary : undefined}
+      fg={isSelected ? theme.colors.selection.fg : theme.colors.text.primary}
+    >
       {rowText}
     </text>
   );
@@ -510,10 +547,18 @@ function renderSuggestionRow(
 function StatusBar(props: StatusBarProps): JSX.Element {
   return (
     <box
-      style={{ minHeight: 1, maxHeight: 3, paddingLeft: 1, paddingRight: 1, flexDirection: "row", justifyContent: "space-between" }}
+      style={{
+        minHeight: 1,
+        maxHeight: 3,
+        paddingLeft: 1,
+        paddingRight: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        backgroundColor: props.theme.colors.panel.bg
+      }}
     >
-      <text>{props.statusLabel}</text>
-      <text fg="#a3e635">
+      <text fg={props.theme.colors.text.muted ?? props.theme.colors.text.primary}>{props.statusLabel}</text>
+      <text fg={props.theme.colors.status.fg}>
         {`prompts: ${props.promptCount} | words: ${props.responderWordCount} | ${props.streamState}`}
       </text>
     </box>
@@ -526,13 +571,18 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
   const textareaHeight = Math.max(3, containerHeight - 2);
 
   return (
-    <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }} onMouseUp={props.onMouseUp}>
-      <HeaderBar text={props.headerText} />
+    <box
+      flexDirection="column"
+      style={{ width: "100%", height: "100%", padding: 1, gap: 1, backgroundColor: props.theme.colors.background }}
+      onMouseUp={props.onMouseUp}
+    >
+      <HeaderBar text={props.headerText} theme={props.theme} />
       <ScrollbackView
         lines={props.lines}
         scrollRef={props.scrollRef}
         autoFollow={props.autoFollow}
         onScroll={props.onScroll}
+        theme={props.theme}
       />
       <InputArea
         textareaRef={props.textareaRef}
@@ -540,20 +590,22 @@ function ChatLayout(props: ChatLayoutProps): JSX.Element {
         textareaHeight={textareaHeight}
         handleSubmit={props.handleSubmit}
         enforceInputLineBounds={props.enforceInputLineBounds}
+        theme={props.theme}
       />
-      <SuggestionPanel suggestions={props.suggestions} selectedIndex={props.selectedSuggestion} />
+      <SuggestionPanel suggestions={props.suggestions} selectedIndex={props.selectedSuggestion} theme={props.theme} />
       <StatusBar
         statusLabel={props.statusLabel}
         promptCount={props.promptCount}
         responderWordCount={props.responderWordCount}
         streamState={props.streamState}
+        theme={props.theme}
       />
     </box>
   );
 }
 
-function renderChatLine(line: ChatLine): JSX.Element {
-  const color = roleColor(line.role);
+function renderChatLine(line: ChatLine, theme: ThemeDefinition): JSX.Element {
+  const color = roleColor(line.role, theme);
   return (
     <text key={line.id} fg={color}>
       [{line.role}] {line.text}
@@ -561,17 +613,17 @@ function renderChatLine(line: ChatLine): JSX.Element {
   );
 }
 
-function roleColor(role: Role): string {
+function roleColor(role: Role, theme: ThemeDefinition): string {
   if (role === "user") {
-    return "#7dd3fc";
+    return theme.colors.text.user;
   }
   if (role === "thinking") {
-    return "#94a3b8";
+    return theme.colors.text.thinking;
   }
-  return "#facc15";
+  return theme.colors.text.responder;
 }
 
-function renderToolBlock(block: ToolBlock): JSX.Element {
+function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element {
   const content = block.scrollable ? (
     <scrollbox
       style={{
@@ -588,7 +640,7 @@ function renderToolBlock(block: ToolBlock): JSX.Element {
     >
       <box flexDirection="column" style={{ gap: 0, width: "100%", paddingLeft: 0, paddingRight: 0 }}>
         {block.lines.map((line, index) => (
-          <text key={`${block.id}-line-${index}`} fg="#c084fc">
+          <text key={`${block.id}-line-${index}`} fg={theme.colors.text.tool}>
             {line}
           </text>
         ))}
@@ -596,7 +648,7 @@ function renderToolBlock(block: ToolBlock): JSX.Element {
     </scrollbox>
   ) : (
     block.lines.map((line, index) => (
-      <text key={`${block.id}-line-${index}`} fg="#c084fc">
+      <text key={`${block.id}-line-${index}`} fg={theme.colors.text.tool}>
         {line}
       </text>
     ))
@@ -613,12 +665,14 @@ function renderToolBlock(block: ToolBlock): JSX.Element {
         width: "100%",
         flexDirection: "column",
         gap: 0,
-        borderStyle: block.isBatch ? "rounded" : "single"
+        borderStyle: block.isBatch ? "rounded" : "single",
+        borderColor: theme.colors.panel.border,
+        backgroundColor: theme.colors.panel.bg
       }}
     >
       {content}
       {block.streaming ? (
-        <text fg="#94a3b8" key={`${block.id}-streaming`}>
+        <text fg={theme.colors.text.muted} key={`${block.id}-streaming`}>
           ...streaming...
         </text>
       ) : null}
@@ -737,6 +791,7 @@ export function App(): JSX.Element {
   const textareaRef = useRef<TextareaRenderable>(null);
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
+  const { themes, theme, setThemeBySlug } = useThemeManager();
   const renderer = useRenderer();
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } =
     useCompletionManager(textareaRef);
@@ -758,7 +813,18 @@ export function App(): JSX.Element {
     setStreamState,
     updateToolBlock
   } = useChatStore(makeLineId);
-  const { modalOpen, modalElement, handleCommand } = useModalManager(appendLines, () => textareaRef.current?.focus());
+
+  useEffect(() => {
+    setThemeSuggestions(themes.map((entry) => ({ slug: entry.slug, name: entry.name })));
+  }, [themes]);
+
+  const { modalOpen, modalElement, handleCommand: handleModalCommand } = useModalManager(
+    appendLines,
+    () => textareaRef.current?.focus(),
+    themes,
+    theme,
+    (next) => setThemeBySlug(next.slug)
+  );
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
 
@@ -774,6 +840,35 @@ export function App(): JSX.Element {
     setStreamState,
     streamRunId,
     mountedRef
+  );
+
+  const applyTheme = useCallback(
+    (key: string) => {
+      const match = findTheme(themes, key);
+      if (!match) {
+        appendLines("responder", [`Theme not found: ${key}`]);
+        return;
+      }
+      setThemeBySlug(match.slug);
+      appendLines("responder", [`Theme set to ${match.name}`]);
+    },
+    [appendLines, setThemeBySlug, themes]
+  );
+
+  const handleCommand = useCallback(
+    (command: string) => {
+      if (command.startsWith("/theme")) {
+        const parts = command.trim().split(/\s+/);
+        if (parts.length === 1) {
+          return handleModalCommand("/theme");
+        }
+        const target = parts.slice(1).join(" ");
+        applyTheme(target);
+        return true;
+      }
+      return handleModalCommand(command);
+    },
+    [applyTheme, handleModalCommand]
   );
 
   const cancelStreaming = useCallback(() => {
@@ -841,6 +936,7 @@ export function App(): JSX.Element {
         onMouseUp={handleMouseUp}
         suggestions={suggestions}
         selectedSuggestion={selectedIndex}
+        theme={theme}
       />
       {modalElement}
     </>

@@ -1,5 +1,6 @@
 import { useKeyboard } from "@opentui/react";
 import type { JSX } from "react";
+import type { ThemeDefinition } from "./theme";
 
 export interface ModalShellProps {
   readonly title: string;
@@ -8,6 +9,7 @@ export interface ModalShellProps {
   readonly onClose: () => void;
   readonly children: JSX.Element | JSX.Element[];
   readonly footer?: JSX.Element;
+  readonly theme?: ThemeDefinition;
 }
 
 export function ModalShell(props: ModalShellProps): JSX.Element {
@@ -29,7 +31,8 @@ export function ModalShell(props: ModalShellProps): JSX.Element {
         height: "100%",
         padding: 1,
         alignItems: "center",
-        justifyContent: "center"
+        justifyContent: "center",
+        backgroundColor: props.theme?.colors.background
       }}
     >
       <box
@@ -38,13 +41,14 @@ export function ModalShell(props: ModalShellProps): JSX.Element {
           width: props.width ?? "95%",
           maxWidth: props.width ?? "95%",
           padding: 1,
-          backgroundColor: "#0f172a",
+          borderColor: props.theme?.colors.panel.border,
+          backgroundColor: props.theme?.colors.panel.bg,
           flexDirection: "column",
           gap: 1
         }}
       >
-        <text>{props.title}</text>
-        {props.subtitle ? <text>{props.subtitle}</text> : null}
+        <text fg={props.theme?.colors.text.primary}>{props.title}</text>
+        {props.subtitle ? <text fg={props.theme?.colors.text.muted}>{props.subtitle}</text> : null}
         <box flexDirection="column" style={{ gap: 1, flexGrow: 1 }}>
           {props.children}
         </box>

@@ -4,6 +4,15 @@ interface SlashNode {
   children?: SlashNode[];
 }
 
+let themeNodes: SlashNode[] = [];
+
+export function setThemeSuggestions(themes: { slug: string; name: string }[]): void {
+  themeNodes = themes.map((theme) => ({
+    name: theme.slug,
+    description: theme.name
+  }));
+}
+
 const SLASH_COMMANDS: SlashNode[] = [
   { name: "about", description: "show version info" },
   { name: "auth", description: "Open auth dialog or toggle OAuth enablement for providers (gemini, qwen, anthropic)" },
@@ -137,6 +146,9 @@ export function extractSlashContext(input: string, cursorOffset: number): { part
 function resolvePath(parts: string[]): SlashNode[] {
   if (parts.length === 0) {
     return SLASH_COMMANDS;
+  }
+  if (parts.length === 1 && parts[0] === "theme") {
+    return themeNodes.length > 0 ? themeNodes : [];
   }
   let current: SlashNode[] = SLASH_COMMANDS;
   for (const part of parts) {

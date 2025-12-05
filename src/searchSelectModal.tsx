@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { filterItems, type SearchItem } from "./modalTypes";
 import { ModalShell } from "./modalShell";
+import type { ThemeDefinition } from "./theme";
 
 const GRID_COLUMNS = 3;
 const SEARCH_PAGE_SIZE = GRID_COLUMNS * 6;
@@ -15,6 +16,7 @@ export interface SearchSelectProps {
   readonly footerHint?: string;
   readonly onClose: () => void;
   readonly onSelect: (item: SearchItem) => void;
+  readonly theme?: ThemeDefinition;
 }
 
 interface SearchState {
@@ -42,10 +44,15 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
   useSearchSelectKeys(filtered, selectedIndex, setSelectedIndex, current, props.onSelect, props.onClose);
 
   return (
-    <ModalShell title={props.title} onClose={props.onClose} footer={props.footerHint ? <text>{props.footerHint}</text> : undefined}>
-      <text>{`Found ${filtered.length} of ${props.items.length} ${props.noun}`}</text>
+    <ModalShell
+      title={props.title}
+      onClose={props.onClose}
+      theme={props.theme}
+      footer={props.footerHint ? <text fg={props.theme?.colors.text.muted}>{props.footerHint}</text> : undefined}
+    >
+      <text fg={props.theme?.colors.text.primary}>{`Found ${filtered.length} of ${props.items.length} ${props.noun}`}</text>
       <box flexDirection="row" style={{ gap: 1, alignItems: "center" }}>
-        <text>{`${props.alphabetical ? "Search" : "Filter"}:`}</text>
+        <text fg={props.theme?.colors.text.primary}>{`${props.alphabetical ? "Search" : "Filter"}:`}</text>
         <textarea
           ref={searchRef}
           placeholder="type to filter"
@@ -53,11 +60,23 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
           onSubmit={() => undefined}
           onContentChange={() => setQuery(searchRef.current?.plainText ?? "")}
           onCursorChange={() => setQuery(searchRef.current?.plainText ?? "")}
-          style={{ height: 1, width: "90%", minHeight: 1, maxHeight: 1, paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0 }}
+          style={{
+            height: 1,
+            width: "90%",
+            minHeight: 1,
+            maxHeight: 1,
+            paddingLeft: 0,
+            paddingRight: 0,
+            paddingTop: 0,
+            paddingBottom: 0,
+            fg: props.theme?.colors.input.fg,
+            bg: props.theme?.colors.input.bg,
+            borderColor: props.theme?.colors.input.border
+          }}
         />
       </box>
-      <text>{`Showing ${startDisplay}-${endDisplay} of ${filtered.length} rows`}</text>
-      <SearchGrid items={visible} pageStart={pageStart} selectedIndex={selectedIndex} />
+      <text fg={props.theme?.colors.text.primary}>{`Showing ${startDisplay}-${endDisplay} of ${filtered.length} rows`}</text>
+      <SearchGrid items={visible} pageStart={pageStart} selectedIndex={selectedIndex} theme={props.theme} />
     </ModalShell>
   );
 }
@@ -112,11 +131,11 @@ function useSearchSelectKeys(
   });
 }
 
-function SearchGrid(props: { readonly items: SearchItem[]; readonly pageStart: number; readonly selectedIndex: number }): JSX.Element {
-  return <box flexDirection="column" style={{ gap: 0 }}>{renderSearchGrid(props.items, props.pageStart, props.selectedIndex)}</box>;
+function SearchGrid(props: { readonly items: SearchItem[]; readonly pageStart: number; readonly selectedIndex: number; readonly theme?: ThemeDefinition }): JSX.Element {
+  return <box flexDirection="column" style={{ gap: 0 }}>{renderSearchGrid(props.items, props.pageStart, props.selectedIndex, props.theme)}</box>;
 }
 
-function renderSearchGrid(items: SearchItem[], pageStart: number, selectedIndex: number): JSX.Element[] {
+function renderSearchGrid(items: SearchItem[], pageStart: number, selectedIndex: number, theme?: ThemeDefinition): JSX.Element[] {
   const rows = chunkItems(items, GRID_COLUMNS);
   const columnWidths = Array.from({ length: GRID_COLUMNS }, (_, col) =>
     Math.max(
@@ -128,16 +147,21 @@ function renderSearchGrid(items: SearchItem[], pageStart: number, selectedIndex:
   return rows.map((row, rowIndex) => (
     <box key={`row-${rowIndex}`} flexDirection="row" style={{ gap: 2 }}>
       {row.map((item, index) =>
-        renderSearchItem(item, pageStart + rowIndex * GRID_COLUMNS + index, selectedIndex, columnWidths[index] ?? item.label.length + 2)
+        renderSearchItem(item, pageStart + rowIndex * GRID_COLUMNS + index, selectedIndex, columnWidths[index] ?? item.label.length + 2, theme)
       )}
     </box>
   ));
 }
 
-function renderSearchItem(item: SearchItem, absoluteIndex: number, selectedIndex: number, width: number): JSX.Element {
+function renderSearchItem(item: SearchItem, absoluteIndex: number, selectedIndex: number, width: number, theme?: ThemeDefinition): JSX.Element {
   const bullet = absoluteIndex === selectedIndex ? "●" : "○";
   const label = `${bullet} ${item.label}`.padEnd(width + 2, " ");
-  return <text key={item.id}>{label}</text>;
+  const isSelected = absoluteIndex === selectedIndex;
+  return (
+    <text key={item.id} fg={isSelected ? theme?.colors.accent.primary : theme?.colors.text.primary}>
+      {label}
+    </text>
+  );
 }
 
 function getPagination(filtered: SearchItem[], selectedIndex: number): {

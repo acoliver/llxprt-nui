@@ -1,18 +1,23 @@
 import type { JSX } from "react";
 import { useCallback, useMemo, useState } from "react";
-import { AuthModal, AUTH_DEFAULTS, MODEL_OPTIONS, PROVIDER_OPTIONS, SearchSelectModal, type AuthOption } from "./modals";
+import { AuthModal, AUTH_DEFAULTS, MODEL_OPTIONS, PROVIDER_OPTIONS, SearchSelectModal, ThemeModal, type AuthOption } from "./modals";
+import type { ThemeDefinition } from "./theme";
 import type { SearchItem } from "./modalTypes";
 
-type ModalState = { type: "none" } | { type: "model" } | { type: "provider" } | { type: "auth" };
+type ModalState = { type: "none" } | { type: "model" } | { type: "provider" } | { type: "auth" } | { type: "theme" };
 const MODAL_COMMANDS: Record<string, ModalState["type"]> = {
   "/model": "model",
   "/provider": "provider",
-  "/auth": "auth"
+  "/auth": "auth",
+  "/theme": "theme"
 };
 
 export function useModalManager(
   appendLines: (role: "user" | "responder", textLines: string[]) => void,
-  focusInput: () => void
+  focusInput: () => void,
+  themes: ThemeDefinition[],
+  currentTheme: ThemeDefinition,
+  onThemeSelect: (theme: ThemeDefinition) => void
 ): { modalOpen: boolean; modalElement: JSX.Element | null; handleCommand: (command: string) => boolean } {
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [authOptions, setAuthOptions] = useState<AuthOption[]>(AUTH_DEFAULTS);
@@ -45,8 +50,20 @@ export function useModalManager(
     [appendLines]
   );
   const modalElement: JSX.Element | null = useMemo(
-    () => renderModal(modal, closeModal, handleModelSelect, handleProviderSelect, handleAuthSave, authOptions),
-    [authOptions, closeModal, handleAuthSave, handleModelSelect, handleProviderSelect, modal]
+    () =>
+      renderModal(
+        modal,
+        closeModal,
+        handleModelSelect,
+        handleProviderSelect,
+        handleAuthSave,
+        authOptions,
+        themes,
+        currentTheme,
+        onThemeSelect,
+        appendLines
+      ),
+    [appendLines, authOptions, closeModal, currentTheme, handleAuthSave, handleModelSelect, handleProviderSelect, modal, onThemeSelect, themes]
   );
   const handleCommand = useCallback(
     (command: string) => {
@@ -69,7 +86,11 @@ function renderModal(
   handleModelSelect: (item: SearchItem) => void,
   handleProviderSelect: (item: SearchItem) => void,
   handleAuthSave: (next: AuthOption[]) => void,
-  authOptions: AuthOption[]
+  authOptions: AuthOption[],
+  themes: ThemeDefinition[],
+  currentTheme: ThemeDefinition,
+  onThemeSelect: (theme: ThemeDefinition) => void,
+  appendLines: (role: "user" | "responder", textLines: string[]) => void
 ): JSX.Element | null {
   switch (modal.type) {
     case "model":
@@ -82,6 +103,7 @@ function renderModal(
           footerHint="Tab to switch modes"
           onClose={closeModal}
           onSelect={handleModelSelect}
+          theme={currentTheme}
         />
       );
     case "provider":
@@ -94,10 +116,23 @@ function renderModal(
           footerHint="Tab to switch modes"
           onClose={closeModal}
           onSelect={handleProviderSelect}
+          theme={currentTheme}
         />
       );
     case "auth":
-      return <AuthModal options={authOptions} onClose={closeModal} onSave={handleAuthSave} />;
+      return <AuthModal options={authOptions} onClose={closeModal} onSave={handleAuthSave} theme={currentTheme} />;
+    case "theme":
+      return (
+        <ThemeModal
+          themes={themes}
+          current={currentTheme}
+          onClose={closeModal}
+          onSelect={(theme) => {
+            onThemeSelect(theme);
+            appendLines("responder", [`Theme set to ${theme.name}`]);
+          }}
+        />
+      );
     default:
       return null;
   }

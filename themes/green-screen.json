@@ -1,0 +1,53 @@
+{
+  "name": "Green Screen",
+  "slug": "green-screen",
+  "kind": "dark",
+  "colors": {
+    "background": "#1d2a1d",
+    "panel": {
+      "bg": "#1d2a1d",
+      "border": "#6a9955",
+      "headerBg": "#1d2a1d",
+      "headerFg": "#6a9955"
+    },
+    "text": {
+      "primary": "#6a9955",
+      "muted": "#6a9955",
+      "user": "#6a9955",
+      "responder": "#6a9955",
+      "thinking": "#6a9955",
+      "tool": "#00ff00"
+    },
+    "input": {
+      "bg": "#1d2a1d",
+      "fg": "#6a9955",
+      "placeholder": "#6a9955",
+      "border": "#6a9955"
+    },
+    "status": {
+      "fg": "#00ff00",
+      "muted": "#6a9955"
+    },
+    "accent": {
+      "primary": "#6a9955",
+      "secondary": "#6a9955",
+      "warning": "#6a9955",
+      "error": "#6a9955",
+      "success": "#00ff00"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#6a9955"
+    },
+    "diff": {
+      "addedBg": "#6a9955",
+      "addedFg": "#000000",
+      "removedBg": "#6a9955",
+      "removedFg": "#000000"
+    },
+    "scrollbar": {
+      "thumb": "#6a9955",
+      "track": "#6a9955"
+    }
+  }
+}
