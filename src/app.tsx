@@ -6,16 +6,14 @@ import type { Dispatch, JSX, RefObject, SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { extractMentionQuery, findMentionRange, getSuggestions, MAX_SUGGESTION_COUNT } from "./suggestions";
-
+import { extractSlashContext, getSlashSuggestions } from "./slash";
 type Role = "user" | "responder";
 type StreamState = "idle" | "streaming";
-
 interface ChatLine {
   id: string;
   role: Role;
   text: string;
 }
-
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 interface RefHandle<T> {
   current: T;
@@ -28,6 +26,7 @@ const STREAM_MIN_LINES = 5;
 const STREAM_MAX_LINES = 800;
 const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
+const SLASH_SUGGESTION_LIMIT = 50;
 const KEY_LOG_PATH = path.resolve(process.cwd(), "key-events.log");
 
 const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
@@ -40,7 +39,6 @@ const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "kpplus", action: "submit" },
   { name: "linefeed", action: "newline" }
 ];
-
 const OPENERS = [
   "Camus shrugs at the sky,",
   "Nietzsche laughs in the dark,",
@@ -49,7 +47,6 @@ const OPENERS = [
   "Sisyphus pauses mid-push as",
   "Dionysus sings over static and"
 ];
-
 const DRIVERS = [
   "meaning is negotiated then forgotten,",
   "willpower tastes like rusted metal,",
@@ -58,7 +55,6 @@ const DRIVERS = [
   "the abyss wants a conversation,",
   "time is a joke with a long punchline,"
 ];
-
 const SPINS = [
   "so I dance anyway.",
   "yet we still buy coffee at dawn.",
@@ -67,7 +63,6 @@ const SPINS = [
   "while the sea keeps no memory.",
   "so breath becomes a quiet manifesto."
 ];
-
 function useChatStore(makeLineId: () => string) {
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [promptCount, setPromptCount] = useState(0);
@@ -135,9 +130,9 @@ function useInputManager(
   setPromptCount: StateSetter<number>,
   setAutoFollow: StateSetter<boolean>,
   startStreamingResponder: () => Promise<void>,
-  refreshMentions: () => void,
-  clearMentions: () => void,
-  applyCompletion: (value: string) => void
+  refreshCompletion: () => void,
+  clearCompletion: () => void,
+  applyCompletion: () => void
 ) {
   const [inputLineCount, setInputLineCount] = useState(MIN_INPUT_LINES);
 
@@ -148,8 +143,8 @@ function useInputManager(
     }
     const clamped = clampInputLines(editor.lineCount);
     setInputLineCount(clamped);
-    refreshMentions();
-  }, [refreshMentions, textareaRef]);
+    refreshCompletion();
+  }, [refreshCompletion, textareaRef]);
 
   const handleSubmit = useCallback(() => {
     const editor = textareaRef.current;
@@ -169,17 +164,17 @@ function useInputManager(
     editor.clear();
     setInputLineCount(MIN_INPUT_LINES);
     setAutoFollow(true);
-    clearMentions();
+    clearCompletion();
     editor.submit();
     void startStreamingResponder();
-  }, [appendLines, clearMentions, refreshMentions, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
+  }, [appendLines, clearCompletion, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
   const handleTabComplete = useCallback(
-    (value: string) => {
-      applyCompletion(value);
-      refreshMentions();
+    () => {
+      applyCompletion();
+      refreshCompletion();
     },
-    [applyCompletion, refreshMentions]
+    [applyCompletion, refreshCompletion]
   );
 
   return { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete };
@@ -263,10 +258,71 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
   return { autoFollow, setAutoFollow, scrollBy, jumpToBottom, handleContentChange, handleMouseScroll };
 }
 
-function useMentionSuggestions(textareaRef: RefObject<TextareaRenderable>) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+type CompletionMode = "none" | "mention" | "slash";
 
+interface CompletionSuggestion {
+  value: string;
+  description?: string;
+  insertText: string;
+  mode: Exclude<CompletionMode, "none">;
+  displayPrefix?: boolean;
+  hasChildren?: boolean;
+}
+
+function buildSlashCompletions(parts: string[]): CompletionSuggestion[] {
+  const isRoot = parts.length <= 1;
+  return getSlashSuggestions(parts, SLASH_SUGGESTION_LIMIT).map((suggestion) => ({
+    value: suggestion.value,
+    description: suggestion.description,
+    insertText: suggestion.fullPath,
+    mode: "slash" as const,
+    displayPrefix: isRoot,
+    hasChildren: suggestion.hasChildren
+  }));
+}
+
+function buildMentionCompletions(query: string): CompletionSuggestion[] {
+  return getSuggestions(query, MAX_SUGGESTION_COUNT).map((value) => ({
+    value,
+    insertText: value,
+    mode: "mention" as const
+  }));
+}
+
+function applyMentionCompletion(editor: TextareaRenderable, suggestion: CompletionSuggestion): void {
+  const range = findMentionRange(editor.plainText, editor.cursorOffset);
+  if (!range) {
+    return;
+  }
+  const before = editor.plainText.slice(0, range.start);
+  const after = editor.plainText.slice(range.end);
+  const completion = `${suggestion.insertText} `;
+  const nextText = `${before}${completion}${after}`;
+  editor.setText(nextText);
+  editor.cursorOffset = (before + completion).length;
+}
+
+function applySlashCompletion(
+  editor: TextareaRenderable,
+  context: { start: number; end: number },
+  suggestion: CompletionSuggestion
+): void {
+  const before = editor.plainText.slice(0, context.start);
+  const after = editor.plainText.slice(context.end);
+  const completion = `${suggestion.insertText} `;
+  const nextText = `${before}${completion}${after}`;
+  editor.setText(nextText);
+  editor.cursorOffset = (before + completion).length;
+}
+function useCompletionManager(textareaRef: RefObject<TextareaRenderable>) {
+  const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const slashContext = useRef<{ start: number; end: number } | null>(null);
+  const reset = useCallback(() => {
+    slashContext.current = null;
+    setSuggestions([]);
+    setSelectedIndex(0);
+  }, []);
   const refresh = useCallback(() => {
     const editor = textareaRef.current;
     if (!editor) {
@@ -274,22 +330,22 @@ function useMentionSuggestions(textareaRef: RefObject<TextareaRenderable>) {
     }
     const text = editor.plainText;
     const cursor = editor.cursorOffset;
-    const mention = extractMentionQuery(text, cursor);
-    if (mention === null) {
-      setSuggestions([]);
+    const slash = extractSlashContext(text, cursor);
+    if (slash) {
+      slashContext.current = { start: slash.start, end: slash.end };
+      setSuggestions(buildSlashCompletions(slash.parts));
       setSelectedIndex(0);
-    return;
-  }
-  const next = getSuggestions(mention, MAX_SUGGESTION_COUNT);
-  setSuggestions(next);
-    setSelectedIndex(0);
-  }, [textareaRef]);
-
-  const clear = useCallback(() => {
-    setSuggestions([]);
-    setSelectedIndex(0);
-  }, []);
-
+      return;
+    }
+    const mention = extractMentionQuery(text, cursor);
+    if (mention !== null) {
+      slashContext.current = null;
+      setSuggestions(buildMentionCompletions(mention));
+      setSelectedIndex(0);
+      return;
+    }
+    reset();
+  }, [reset, textareaRef]);
   const moveSelection = useCallback(
     (delta: number) => {
       if (suggestions.length === 0) {
@@ -308,16 +364,33 @@ function useMentionSuggestions(textareaRef: RefObject<TextareaRenderable>) {
     },
     [suggestions.length]
   );
-
-  const getSelected = useCallback((): string | null => {
-    if (suggestions.length === 0) {
-      return null;
+  const applySelection = useCallback(() => {
+    const editor = textareaRef.current;
+    if (!editor) {
+      return;
     }
-    const clamped = Math.min(Math.max(selectedIndex, 0), suggestions.length - 1);
-    return suggestions[clamped] ?? null;
-  }, [selectedIndex, suggestions]);
-
-  return { suggestions, selectedIndex, refresh, clear, moveSelection, getSelected };
+    const current = suggestions[selectedIndex];
+    if (!current) {
+      return;
+    }
+    if (current.mode === "mention") {
+      applyMentionCompletion(editor, current);
+      return;
+    }
+    if (current.mode === "slash") {
+      if (!slashContext.current) {
+        return;
+      }
+      applySlashCompletion(editor, slashContext.current, current);
+      slashContext.current = null;
+    }
+    if (current.mode === "slash" && current.hasChildren) {
+      refresh();
+    } else {
+      reset();
+    }
+  }, [refresh, reset, selectedIndex, suggestions, textareaRef]);
+  return { suggestions, selectedIndex, refresh, clear: reset, moveSelection, applySelection };
 }
 
 interface ChatLayoutProps {
@@ -334,136 +407,225 @@ interface ChatLayoutProps {
   readonly responderWordCount: number;
   readonly streamState: StreamState;
   readonly onScroll: (event: { type: string }) => void;
-  readonly suggestions: string[];
+  readonly suggestions: CompletionSuggestion[];
   readonly selectedSuggestion: number;
 }
 
-function ChatLayout(props: ChatLayoutProps): JSX.Element {
-  const visibleInputLines = Math.min(MAX_INPUT_LINES, clampInputLines(props.inputLineCount));
-  const inputContainerHeight = Math.min(MAX_INPUT_LINES + 2, Math.max(MIN_INPUT_LINES + 2, visibleInputLines + 2));
-  const textareaHeight = Math.max(3, inputContainerHeight - 2);
-  const suggestionHeight = props.suggestions.length > 0 ? Math.min(MAX_SUGGESTION_COUNT, props.suggestions.length) : 0;
+interface InputAreaProps {
+  readonly textareaRef: RefObject<TextareaRenderable>;
+  readonly containerHeight: number;
+  readonly textareaHeight: number;
+  readonly handleSubmit: () => void;
+  readonly enforceInputLineBounds: () => void;
+}
 
+interface SuggestionPanelProps {
+  readonly suggestions: CompletionSuggestion[];
+  readonly selectedIndex: number;
+}
+
+interface ScrollbackProps {
+  readonly lines: ChatLine[];
+  readonly scrollRef: RefObject<ScrollBoxRenderable>;
+  readonly autoFollow: boolean;
+  readonly onScroll: (event: { type: string }) => void;
+}
+
+interface StatusBarProps {
+  readonly statusLabel: string;
+  readonly promptCount: number;
+  readonly responderWordCount: number;
+  readonly streamState: StreamState;
+}
+
+function HeaderBar({ text }: { readonly text: string }): JSX.Element {
   return (
-    <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
-      <box style={{ minHeight: 1, maxHeight: 5, border: true, padding: 1 }}>
-        <text>{props.headerText}</text>
-      </box>
-      <scrollbox
-        ref={props.scrollRef}
-        style={{
-          flexGrow: 1,
-          border: true,
-          paddingTop: 0,
-          paddingBottom: 0,
-          paddingLeft: 0,
-          paddingRight: 0
-        }}
-        contentOptions={{ paddingLeft: 2, paddingRight: 2 }}
-        scrollX={false}
-        stickyScroll={props.autoFollow}
-        stickyStart="bottom"
-        scrollY
-        onMouse={props.onScroll}
-        focused
-      >
-        <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
-          {props.lines.map((line) => (
-            <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
-              [{line.role}] {line.text}
-            </text>
-          ))}
-        </box>
-      </scrollbox>
-      <box
-        style={{
-          height: inputContainerHeight,
-          minHeight: MIN_INPUT_LINES + 2,
-          maxHeight: MAX_INPUT_LINES + 2,
-          border: true,
-          paddingTop: 0,
-          paddingBottom: 0,
-          paddingLeft: 0,
-          paddingRight: 0,
-          flexDirection: "column",
-          gap: 0
-        }}
-      >
-        <textarea
-          ref={props.textareaRef}
-          focused
-          placeholder="Type a thought, then submit with Enter"
-          keyBindings={TEXTAREA_KEY_BINDINGS}
-          onSubmit={props.handleSubmit}
-          onContentChange={props.enforceInputLineBounds}
-          onCursorChange={props.enforceInputLineBounds}
-          wrapMode="word"
-          style={{
-            height: textareaHeight,
-            minHeight: textareaHeight,
-            maxHeight: textareaHeight,
-            width: "100%",
-            paddingLeft: 1,
-            paddingRight: 1,
-            paddingTop: 0,
-            paddingBottom: 0
-          }}
-        />
-      </box>
-      {suggestionHeight > 0 ? (
-        <box
-          style={{
-            height: suggestionHeight,
-            minHeight: suggestionHeight,
-            maxHeight: suggestionHeight,
-            paddingLeft: 1,
-            paddingRight: 1,
-            paddingTop: 0,
-            paddingBottom: 0,
-            flexDirection: "column"
-          }}
-        >
-          {Array.from({ length: MAX_SUGGESTION_COUNT }).map((_, index) => (
-            <text
-              key={`suggestion-${index}`}
-              bg={index === props.selectedSuggestion ? "#334155" : undefined}
-              fg={index === props.selectedSuggestion ? "#a3e635" : undefined}
-            >
-              {props.suggestions[index] ?? ""}
-            </text>
-          ))}
-        </box>
-      ) : null}
-      <box
-        style={{
-          minHeight: 1,
-          maxHeight: 3,
-          paddingLeft: 1,
-          paddingRight: 1,
-          flexDirection: "row",
-          justifyContent: "space-between"
-        }}
-      >
-        <text>{props.statusLabel}</text>
-        <text fg="#a3e635">
-          {`prompts: ${props.promptCount} | words: ${props.responderWordCount} | ${props.streamState}`}
-        </text>
-      </box>
+    <box style={{ minHeight: 1, maxHeight: 5, border: true, padding: 1 }}>
+      <text>{text}</text>
     </box>
   );
 }
 
+function ScrollbackView(props: ScrollbackProps): JSX.Element {
+  return (
+    <scrollbox
+      ref={props.scrollRef}
+      style={{ flexGrow: 1, border: true, paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0 }}
+      contentOptions={{ paddingLeft: 2, paddingRight: 2 }}
+      scrollX={false}
+      stickyScroll={props.autoFollow}
+      stickyStart="bottom"
+      scrollY
+      onMouse={props.onScroll}
+      focused
+    >
+      <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
+        {props.lines.map((line) => (
+          <text key={line.id} fg={line.role === "user" ? "#7dd3fc" : "#facc15"}>
+            [{line.role}] {line.text}
+          </text>
+        ))}
+      </box>
+    </scrollbox>
+  );
+}
+
+function InputArea(props: InputAreaProps): JSX.Element {
+  return (
+    <box
+      style={{
+        height: props.containerHeight,
+        minHeight: MIN_INPUT_LINES + 2,
+        maxHeight: MAX_INPUT_LINES + 2,
+        border: true,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        flexDirection: "column",
+        gap: 0
+      }}
+    >
+      <textarea
+        ref={props.textareaRef}
+        focused
+        placeholder="Type a thought, then submit with Enter"
+        keyBindings={TEXTAREA_KEY_BINDINGS}
+        onSubmit={props.handleSubmit}
+        onContentChange={props.enforceInputLineBounds}
+        onCursorChange={props.enforceInputLineBounds}
+        wrapMode="word"
+        style={{
+          height: props.textareaHeight,
+          minHeight: props.textareaHeight,
+          maxHeight: props.textareaHeight,
+          width: "100%",
+          paddingLeft: 1,
+          paddingRight: 1,
+          paddingTop: 0,
+          paddingBottom: 0
+        }}
+      />
+    </box>
+  );
+}
+
+function SuggestionPanel(props: SuggestionPanelProps): JSX.Element | null {
+  if (props.suggestions.length === 0) {
+    return null;
+  }
+
+  const pageSize = MAX_SUGGESTION_COUNT;
+  const totalPages = Math.max(1, Math.ceil(props.suggestions.length / pageSize));
+  const pageIndex = Math.floor(props.selectedIndex / pageSize);
+  const pageStart = pageIndex * pageSize;
+  const pageItems = props.suggestions.slice(pageStart, pageStart + pageSize);
+  const maxLabel = pageItems.reduce(
+    (max, item) => Math.max(max, item.value.length + (item.mode === "slash" ? 1 : 0)),
+    0
+  );
+  const indicatorNeeded = props.suggestions.length > pageSize;
+  const height = pageItems.length + (indicatorNeeded ? 1 : 0);
+
+  return (
+    <box
+      style={{
+        height,
+        minHeight: height,
+        maxHeight: height,
+        paddingLeft: 1,
+        paddingRight: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
+        flexDirection: "column"
+      }}
+    >
+      {pageItems.map((item, index) =>
+        renderSuggestionRow(item, pageStart + index, props.selectedIndex, maxLabel)
+      )}
+      {indicatorNeeded ? <text fg="#94a3b8">{`▼ page ${pageIndex + 1}/${totalPages} ▲`}</text> : null}
+    </box>
+  );
+}
+
+function renderSuggestionRow(
+  item: CompletionSuggestion,
+  globalIndex: number,
+  selectedIndex: number,
+  maxLabel: number
+): JSX.Element {
+  const isSelected = globalIndex === selectedIndex;
+  const prefix = item.mode === "slash" && item.displayPrefix !== false ? "/" : "";
+  const label = `${prefix}${item.value}`.padEnd(maxLabel + 1, " ");
+  const description = item.description ? ` ${item.description}` : "";
+  const rowText = `${label}${description}`;
+  return (
+    <text key={`suggestion-${globalIndex}`} bg={isSelected ? "#334155" : undefined} fg={isSelected ? "#a3e635" : undefined}>
+      {rowText}
+    </text>
+  );
+}
+
+function StatusBar(props: StatusBarProps): JSX.Element {
+  return (
+    <box
+      style={{ minHeight: 1, maxHeight: 3, paddingLeft: 1, paddingRight: 1, flexDirection: "row", justifyContent: "space-between" }}
+    >
+      <text>{props.statusLabel}</text>
+      <text fg="#a3e635">
+        {`prompts: ${props.promptCount} | words: ${props.responderWordCount} | ${props.streamState}`}
+      </text>
+    </box>
+  );
+}
+
+function ChatLayout(props: ChatLayoutProps): JSX.Element {
+  const visibleInputLines = Math.min(MAX_INPUT_LINES, clampInputLines(props.inputLineCount));
+  const containerHeight = Math.min(MAX_INPUT_LINES + 2, Math.max(MIN_INPUT_LINES + 2, visibleInputLines + 2));
+  const textareaHeight = Math.max(3, containerHeight - 2);
+
+  return (
+    <box flexDirection="column" style={{ width: "100%", height: "100%", padding: 1, gap: 1 }}>
+      <HeaderBar text={props.headerText} />
+      <ScrollbackView
+        lines={props.lines}
+        scrollRef={props.scrollRef}
+        autoFollow={props.autoFollow}
+        onScroll={props.onScroll}
+      />
+      <InputArea
+        textareaRef={props.textareaRef}
+        containerHeight={containerHeight}
+        textareaHeight={textareaHeight}
+        handleSubmit={props.handleSubmit}
+        enforceInputLineBounds={props.enforceInputLineBounds}
+      />
+      <SuggestionPanel suggestions={props.suggestions} selectedIndex={props.selectedSuggestion} />
+      <StatusBar
+        statusLabel={props.statusLabel}
+        promptCount={props.promptCount}
+        responderWordCount={props.responderWordCount}
+        streamState={props.streamState}
+      />
+    </box>
+  );
+}
+
+function isEnterKey(key: KeyEvent): boolean {
+  return (
+    key.name === "return" ||
+    key.name === "enter" ||
+    key.name === "kpenter" ||
+    key.name === "kpplus" ||
+    key.code === "[57415u" ||
+    key.code === "[57414u" ||
+    key.sequence === "\r" ||
+      key.sequence === "\n"
+  );
+}
 function useEnterSubmit(onSubmit: () => void): void {
   useKeyboard((key) => {
-    const isEnterLike =
-      key.name === "return" ||
-      key.name === "enter" ||
-      key.name === "kpenter" ||
-      key.name === "kpplus" ||
-      key.code === "[57415u" ||
-      key.code === "[57414u" ||
-      key.sequence === "\r" ||
-      key.sequence === "\n";
+    const isEnterLike = isEnterKey(key);
     if (isEnterLike) {
       logEnterKey(key);
     }
@@ -476,7 +638,6 @@ function useEnterSubmit(onSubmit: () => void): void {
     }
   });
 }
-
 function logEnterKey(key: KeyEvent): void {
   try {
     const line = `${new Date().toISOString()}|${key.name}|${key.code ?? ""}|${JSON.stringify(key)}\n`;
@@ -485,7 +646,6 @@ function logEnterKey(key: KeyEvent): void {
     // ignore logging errors
   }
 }
-
 function logAnyKey(key: KeyEvent): void {
   try {
     const line = `${new Date().toISOString()}|${key.name}|${key.code ?? ""}|${key.sequence}|${key.raw}|${
@@ -497,37 +657,74 @@ function logAnyKey(key: KeyEvent): void {
   }
 }
 
-export function App(): JSX.Element {
-  const scrollRef = useRef<ScrollBoxRenderable>(null);
-  const textareaRef = useRef<TextareaRenderable>(null);
-  const streamRunId = useRef(0);
-  const nextLineId = useRef(0);
-  const mountedRef = useRef(true);
-  const { suggestions, selectedIndex, refresh: refreshMentions, clear: clearMentions, moveSelection, getSelected } =
-    useMentionSuggestions(textareaRef);
-
+function useFocusAndMount(textareaRef: RefObject<TextareaRenderable>, mountedRef: RefObject<boolean>): void {
   useEffect(() => {
     textareaRef.current?.focus();
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [mountedRef, textareaRef]);
+}
 
-  const makeLineId = useCallback((): string => {
+function useKeyPressLogging(): void {
+  useKeyboard((key) => {
+    if (key.eventType === "press") {
+      logAnyKey(key);
+    }
+  });
+}
+
+function useSuggestionKeybindings(
+  suggestionCount: number,
+  moveSelection: (delta: number) => void,
+  handleTabComplete: () => void,
+  cancelStreaming: () => void
+): void {
+  const hasSuggestions = suggestionCount > 0;
+  useKeyboard((key) => {
+    if (hasSuggestions && key.name === "down") {
+      key.preventDefault?.();
+      moveSelection(1);
+    } else if (hasSuggestions && key.name === "up") {
+      key.preventDefault?.();
+      moveSelection(-1);
+    } else if (hasSuggestions && key.name === "tab") {
+      key.preventDefault?.();
+      handleTabComplete();
+    } else if (key.name === "escape") {
+      cancelStreaming();
+    }
+  });
+}
+
+function buildStatusLabel(streamState: StreamState, autoFollow: boolean): string {
+  const streamingPart = streamState === "streaming" ? "streaming" : "waiting";
+  const scrollPart = autoFollow ? "follow" : "scroll lock";
+  return `${streamingPart} | ${scrollPart}`;
+}
+
+function useLineIdGenerator(): () => string {
+  const nextLineId = useRef(0);
+  return useCallback((): string => {
     nextLineId.current += 1;
     return `line-${nextLineId.current}`;
   }, []);
+}
 
-  const {
-    lines,
-    appendLines,
-    promptCount,
-    setPromptCount,
-    responderWordCount,
-    setResponderWordCount,
-    streamState,
-    setStreamState
-  } = useChatStore(makeLineId);
+export function App(): JSX.Element {
+  const scrollRef = useRef<ScrollBoxRenderable>(null);
+  const textareaRef = useRef<TextareaRenderable>(null);
+  const streamRunId = useRef(0);
+  const mountedRef = useRef(true);
+  const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } =
+    useCompletionManager(textareaRef);
+
+  useFocusAndMount(textareaRef, mountedRef);
+
+  const makeLineId = useLineIdGenerator();
+
+  const { lines, appendLines, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } =
+    useChatStore(makeLineId);
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
 
@@ -535,13 +732,7 @@ export function App(): JSX.Element {
     handleContentChange();
   }, [handleContentChange, lines.length]);
 
-  const startStreamingResponder = useStreamingResponder(
-    appendLines,
-    setResponderWordCount,
-    setStreamState,
-    streamRunId,
-    mountedRef
-  );
+  const startStreamingResponder = useStreamingResponder(appendLines, setResponderWordCount, setStreamState, streamRunId, mountedRef);
 
   const cancelStreaming = useCallback(() => {
     streamRunId.current += 1;
@@ -554,55 +745,16 @@ export function App(): JSX.Element {
     setPromptCount,
     setAutoFollow,
     startStreamingResponder,
-    refreshMentions,
-    clearMentions,
-    (value) => {
-      const editor = textareaRef.current;
-      if (!editor) {
-        return;
-      }
-      const range = findMentionRange(editor.plainText, editor.cursorOffset);
-      if (!range) {
-        return;
-      }
-      const before = editor.plainText.slice(0, range.start);
-      const after = editor.plainText.slice(range.end);
-      const completion = `${value} `;
-      const nextText = `${before}${completion}${after}`;
-      editor.setText(nextText);
-      editor.cursorOffset = (before + completion).length;
-    }
+    refreshCompletion,
+    clearCompletion,
+    applySelection
   );
 
-  const statusLabel = useMemo(() => {
-    const streamingPart = streamState === "streaming" ? "streaming" : "waiting";
-    const scrollPart = autoFollow ? "follow" : "scroll lock";
-    return `${streamingPart} | ${scrollPart}`;
-  }, [autoFollow, streamState]);
+  const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
 
   useEnterSubmit(handleSubmit);
-  useKeyboard((key) => {
-    if (key.eventType === "press") {
-      logAnyKey(key);
-    }
-  });
-  useKeyboard((key) => {
-    if (suggestions.length > 0 && key.name === "down") {
-      key.preventDefault?.();
-      moveSelection(1);
-    } else if (suggestions.length > 0 && key.name === "up") {
-      key.preventDefault?.();
-      moveSelection(-1);
-    } else if (suggestions.length > 0 && key.name === "tab") {
-      key.preventDefault?.();
-      const choice = getSelected();
-      if (choice) {
-        handleTabComplete(choice);
-      }
-    } else if (key.name === "escape") {
-      cancelStreaming();
-    }
-  });
+  useKeyPressLogging();
+  useSuggestionKeybindings(suggestions.length, moveSelection, handleTabComplete, cancelStreaming);
 
   return (
     <ChatLayout
@@ -628,25 +780,20 @@ export function App(): JSX.Element {
 function clampInputLines(value: number): number {
   return Math.min(MAX_INPUT_LINES, Math.max(MIN_INPUT_LINES, value));
 }
-
 function secureRandomBetween(min: number, max: number): number {
   return randomInt(min, max + 1);
 }
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
-
 function buildResponderLine(): string {
   return `${pick(OPENERS)} ${pick(DRIVERS)} ${pick(SPINS)}`;
 }
-
 function pick<T>(items: readonly T[]): T {
   return items[secureRandomBetween(0, items.length - 1)];
 }
-
 function countWords(text: string): number {
   const matches = text.trim().match(/\S+/g);
   return matches ? matches.length : 0;
