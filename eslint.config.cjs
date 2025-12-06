@@ -6,6 +6,7 @@ const eslintComments = require("eslint-plugin-eslint-comments");
 const sonarjs = require("eslint-plugin-sonarjs");
 const reactPlugin = require("eslint-plugin-react");
 const reactHooks = require("eslint-plugin-react-hooks");
+const vitest = require("@vitest/eslint-plugin");
 
 const tsTypeCheckedRules = tsPlugin.configs["recommended-type-checked"].rules;
 const tsStylisticRules = tsPlugin.configs["stylistic-type-checked"].rules;
@@ -109,6 +110,58 @@ module.exports = [
         allowBind: false
       }],
       "react/jsx-no-constructed-context-values": "error"
+    }
+  },
+  // Vitest test file rules - prevent mock theater and shallow tests
+  {
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "**/__tests__/**/*.{ts,tsx}"],
+    plugins: {
+      vitest
+    },
+    rules: {
+      ...vitest.configs.recommended.rules,
+
+      // Prevent tests without real assertions
+      "vitest/expect-expect": "error",
+      "vitest/no-standalone-expect": "error",
+      "vitest/valid-expect": "error",
+
+      // Prevent conditional/unreliable tests
+      "vitest/no-conditional-expect": "error",
+      "vitest/no-conditional-in-test": "error",
+      "vitest/no-conditional-tests": "error",
+
+      // Require meaningful error checking
+      "vitest/require-to-throw-message": "error",
+
+      // Prevent test pollution
+      "vitest/no-focused-tests": "error",
+      "vitest/no-disabled-tests": "warn",
+      "vitest/no-commented-out-tests": "warn",
+      "vitest/no-identical-title": "error",
+      "vitest/no-duplicate-hooks": "error",
+
+      // Force stricter assertions
+      "vitest/prefer-strict-equal": "error",
+      "vitest/prefer-to-be": "error",
+      "vitest/prefer-to-have-length": "error",
+      "vitest/prefer-comparison-matcher": "error",
+      "vitest/prefer-equality-matcher": "error",
+
+      // Prevent dynamic snapshots that always pass
+      "vitest/no-interpolation-in-snapshots": "error",
+
+      // Structural rules
+      "vitest/max-nested-describe": ["error", { max: 3 }],
+      "vitest/require-top-level-describe": "error",
+      "vitest/prefer-hooks-on-top": "error",
+
+      // Discourage excessive mocking
+      "vitest/no-mocks-import": "warn",
+
+      // Relax some rules that conflict with test patterns
+      "@typescript-eslint/no-empty-function": "off",
+      "max-lines-per-function": "off"
     }
   }
 ];
