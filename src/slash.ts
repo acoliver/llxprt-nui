@@ -5,11 +5,19 @@ interface SlashNode {
 }
 
 let themeNodes: SlashNode[] = [];
+let profileNodes: SlashNode[] = [];
 
 export function setThemeSuggestions(themes: { slug: string; name: string }[]): void {
   themeNodes = themes.map((theme) => ({
     name: theme.slug,
     description: theme.name
+  }));
+}
+
+export function setProfileSuggestions(profileNames: string[]): void {
+  profileNodes = profileNames.map((name) => ({
+    name,
+    description: `Profile: ${name}`
   }));
 }
 
@@ -28,12 +36,26 @@ const SLASH_COMMANDS: SlashNode[] = [
   { name: "help", description: "for help on LLxprt Code" },
   { name: "ide", description: "manage IDE integration" },
   { name: "init", description: "Analyzes the project and creates a tailored LLXPRT.md file." },
-  { name: "model", description: "Open model picker" },
+  { name: "model", description: "Set the model id for the current provider" },
   { name: "mcp", description: "list configured MCP servers and tools, or authenticate with OAuth-enabled servers" },
   { name: "memory", description: "Commands for interacting with memory." },
   { name: "privacy", description: "view Gemini API privacy disclosure and terms" },
   { name: "logging", description: "manage conversation logging settings" },
-  { name: "provider", description: "Open provider picker" },
+  { name: "provider", description: "Set the provider (openai | gemini | anthropic)" },
+  { name: "baseurl", description: "Set the provider base URL" },
+  { name: "key", description: "Set the API key" },
+  { name: "keyfile", description: "Set the API keyfile path" },
+  {
+    name: "profile",
+    description: "Load a profile",
+    children: [
+      {
+        name: "load",
+        description: "Load a profile by name",
+        children: profileNodes
+      }
+    ]
+  },
   { name: "quit", description: "exit the cli" },
   {
     name: "stats",
@@ -149,6 +171,12 @@ function resolvePath(parts: string[]): SlashNode[] {
   }
   if (parts.length >= 1 && parts[0] === "theme") {
     return parts.length === 1 ? themeNodes : [];
+  }
+  if (parts.length === 1 && parts[0] === "profile") {
+    return [{ name: "load", description: "Load a profile by name", children: profileNodes }];
+  }
+  if (parts.length === 2 && parts[0] === "profile" && parts[1] === "load") {
+    return profileNodes;
   }
   let current: SlashNode[] = SLASH_COMMANDS;
   for (const part of parts) {

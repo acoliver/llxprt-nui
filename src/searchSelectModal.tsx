@@ -1,4 +1,5 @@
 import type { TextareaRenderable } from "@opentui/core";
+import { parseColor, stringToStyledText } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { filterItems, type SearchItem } from "./modalTypes";
@@ -32,6 +33,11 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
   const filtered = useMemo(() => filterItems(props.items, query, props.alphabetical), [props.alphabetical, props.items, query]);
   const { pageStart, visible, startDisplay, endDisplay } = getPagination(filtered, selectedIndex);
   const current = filtered[selectedIndex];
+  const placeholderText = useMemo(() => {
+    const base = stringToStyledText("type to filter");
+    const fg = parseColor(props.theme?.colors.input.placeholder ?? props.theme?.colors.text.muted ?? "#888888");
+    return { ...base, chunks: base.chunks.map((chunk) => ({ ...chunk, fg })) };
+  }, [props.theme?.colors.input.placeholder, props.theme?.colors.text.muted]);
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -55,7 +61,7 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
         <text fg={props.theme?.colors.text.primary}>{`${props.alphabetical ? "Search" : "Filter"}:`}</text>
         <textarea
           ref={searchRef}
-          placeholder="type to filter"
+          placeholder={placeholderText}
           keyBindings={[{ name: "return", action: "submit" }]}
           onSubmit={() => undefined}
           onContentChange={() => setQuery(searchRef.current?.plainText ?? "")}
@@ -73,6 +79,10 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
             bg: props.theme?.colors.input.bg,
             borderColor: props.theme?.colors.input.border
           }}
+          textColor={props.theme?.colors.input.fg}
+          focusedTextColor={props.theme?.colors.input.fg}
+          backgroundColor={props.theme?.colors.input.bg}
+          focusedBackgroundColor={props.theme?.colors.input.bg}
         />
       </box>
       <text fg={props.theme?.colors.text.primary}>{`Showing ${startDisplay}-${endDisplay} of ${filtered.length} rows`}</text>

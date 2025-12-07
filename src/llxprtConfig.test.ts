@@ -1,0 +1,130 @@
+import { describe, expect, it } from "vitest";
+import { applyConfigCommand, validateSessionConfig } from "./llxprtConfig";
+import type { SessionConfig } from "./llxprtAdapter";
+
+const BASE_CONFIG: SessionConfig = { provider: "openai" };
+
+describe("applyConfigCommand", () => {
+  it("sets provider when valid", async () => {
+    const result = await applyConfigCommand("/provider gemini", BASE_CONFIG);
+    expect(result.handled).toBe(true);
+    expect(result.nextConfig.provider).toBe("gemini");
+    expect(result.messages[0]).toContain("Provider set to gemini");
+  });
+
+  it("defers empty provider to caller", async () => {
+    const result = await applyConfigCommand("/provider", BASE_CONFIG);
+    expect(result.handled).toBe(false);
+    expect(result.nextConfig).toEqual(BASE_CONFIG);
+  });
+
+  it("rejects unknown provider", async () => {
+    const result = await applyConfigCommand("/provider something", BASE_CONFIG);
+    expect(result.handled).toBe(true);
+    expect(result.nextConfig.provider).toBe("openai");
+    expect(result.messages[0]).toContain("Unknown provider");
+  });
+
+  it("sets base url and accepts alias", async () => {
+    const result = await applyConfigCommand("/basurl https://example.test/api", BASE_CONFIG);
+    expect(result.handled).toBe(true);
+    expect(result.nextConfig.baseUrl).toBe("https://example.test/api");
+  });
+
+  it("sets key and clears keyfile", async () => {
+    const result = await applyConfigCommand("/key secret", { ...BASE_CONFIG, keyFilePath: "/tmp/key" });
+    expect(result.nextConfig.apiKey).toBe("secret");
+    expect(result.nextConfig.keyFilePath).toBeUndefined();
+  });
+
+  it("sets keyfile and clears key", async () => {
+    const result = await applyConfigCommand("/keyfile /tmp/keyfile", { ...BASE_CONFIG, apiKey: "old" });
+    expect(result.nextConfig.keyFilePath).toBe("/tmp/keyfile");
+    expect(result.nextConfig.apiKey).toBeUndefined();
+  });
+
+  it("sets model", async () => {
+    const result = await applyConfigCommand("/model hf:test", BASE_CONFIG);
+    expect(result.nextConfig.model).toBe("hf:test");
+  });
+
+  it("defers empty model to caller", async () => {
+    const result = await applyConfigCommand("/model", BASE_CONFIG);
+    expect(result.handled).toBe(false);
+    expect(result.nextConfig).toEqual(BASE_CONFIG);
+  });
+
+  it("ignores unknown command", async () => {
+    const result = await applyConfigCommand("/unknown foo", BASE_CONFIG);
+    expect(result.handled).toBe(false);
+    expect(result.nextConfig).toEqual(BASE_CONFIG);
+  });
+
+  it("loads profile when complete with load action", async () => {
+    const manager = new FakeProfileManager({
+      synthetic: {
+        version: 1,
+        provider: "openai",
+        model: "hf:zai-org/GLM-4.6",
+        modelParams: { temperature: 0.7 },
+        ephemeralSettings: {
+          "base-url": "https://api.synthetic.new/openai/v1",
+          "auth-keyfile": "/Users/example/.synthetic_key"
+        }
+      }
+    });
+
+    const result = await applyConfigCommand("/profile load synthetic", BASE_CONFIG, { profileManager: manager });
+    expect(result.messages[0]).toContain("Loaded synthetic profile");
+    expect(result.nextConfig.provider).toBe("openai");
+    expect(result.nextConfig.model).toBe("hf:zai-org/GLM-4.6");
+    expect(result.nextConfig.baseUrl).toBe("https://api.synthetic.new/openai/v1");
+    expect(result.nextConfig.keyFilePath).toBe("/Users/example/.synthetic_key");
+  });
+
+  it("reports error for incomplete profile", async () => {
+    const manager = new FakeProfileManager({
+      synthetic: {
+        version: 1,
+        provider: "openai"
+      }
+    });
+
+    const result = await applyConfigCommand("/profile load synthetic", BASE_CONFIG, { profileManager: manager });
+    expect(result.messages[0]).toContain("incomplete");
+    expect(result.nextConfig).toEqual(BASE_CONFIG);
+  });
+
+  it("validates missing pieces", () => {
+    const messages = validateSessionConfig({ provider: "openai" });
+    expect(messages.some((m) => m.toLowerCase().includes("base url"))).toBe(true);
+    expect(messages.some((m) => m.toLowerCase().includes("model"))).toBe(true);
+    expect(messages.some((m) => m.toLowerCase().includes("key"))).toBe(true);
+  });
+
+  it("can skip model requirement", () => {
+    const messages = validateSessionConfig({ provider: "openai" }, { requireModel: false });
+    expect(messages.some((m) => m.toLowerCase().includes("model"))).toBe(false);
+    expect(messages.some((m) => m.toLowerCase().includes("base url"))).toBe(true);
+  });
+});
+
+class FakeProfileManager {
+  private readonly profiles: Record<string, unknown>;
+
+  constructor(profiles: Record<string, unknown>) {
+    this.profiles = profiles;
+  }
+
+  async loadProfile(name: string): Promise<unknown> {
+    const profile = this.profiles[name];
+    if (!profile) {
+      throw new Error(`Profile '${name}' not found`);
+    }
+    return profile;
+  }
+
+  async listProfiles(): Promise<string[]> {
+    return Object.keys(this.profiles);
+  }
+}

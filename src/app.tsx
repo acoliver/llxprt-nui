@@ -8,21 +8,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clipboard from "clipboardy";
 import { MAX_SUGGESTION_COUNT } from "./suggestions";
 import { useCompletionManager, type CompletionSuggestion } from "./completions";
-import {
-  buildResponderLine,
-  buildThinkingLine,
-  countWords,
-  maybeBuildShellPlan,
-  maybeBuildToolCalls,
-  type ShellPlan
-} from "./responder";
-import { secureRandomBetween } from "./random";
 import { useModalManager } from "./modalManager";
 import { usePromptHistory } from "./history";
 import type { ThemeDefinition } from "./theme";
 import { findTheme } from "./theme";
 import { useThemeManager } from "./themeManager";
-import { setThemeSuggestions } from "./slash";
+import { setThemeSuggestions, setProfileSuggestions } from "./slash";
+import type { SessionConfig, AdapterEvent } from "./llxprtAdapter";
+import { sendMessage, listModels, listProviders } from "./llxprtAdapter";
+import { applyConfigCommand, listAvailableProfiles, validateSessionConfig } from "./llxprtConfig";
 type Role = "user" | "responder" | "thinking";
 type StreamState = "idle" | "streaming";
 interface ChatLine {
@@ -51,8 +45,6 @@ const LOGO_PX_WIDTH = 150;
 const LOGO_PX_HEIGHT = 90;
 const MIN_INPUT_LINES = 1;
 const MAX_INPUT_LINES = 10;
-const STREAM_MIN_LINES = 5;
-const STREAM_MAX_LINES = 800;
 const SCROLL_STEP = 2;
 const PAGE_STEP = 10;
 const KEY_LOG_PATH = path.resolve(process.cwd(), "key-events.log");
@@ -138,75 +130,16 @@ function useChatStore(makeLineId: () => string) {
   };
 }
 
-function useStreamingResponder(
-  appendLines: (role: Role, textLines: string[]) => void,
-  appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
-  updateToolBlock: (id: string, mutate: (block: ToolBlock) => ToolBlock) => void,
-  setResponderWordCount: StateSetter<number>,
-  setStreamState: StateSetter<StreamState>,
-  streamRunId: RefHandle<number>,
-  mountedRef: RefHandle<boolean>
-) {
-  return useCallback(async () => {
-    streamRunId.current += 1;
-    const currentRun = streamRunId.current;
-    setStreamState("streaming");
-    const total = secureRandomBetween(STREAM_MIN_LINES, STREAM_MAX_LINES);
-
-    const startShellStream = async (plan: ShellPlan) => {
-      const id = appendToolBlock({
-        lines: [`[tool] Shell ${plan.command}`],
-        isBatch: false,
-        scrollable: true,
-        maxHeight: plan.maxHeight,
-        streaming: true
-      });
-      await streamShellOutput(plan, id, currentRun, updateToolBlock, streamRunId, mountedRef);
-    };
-
-    for (let index = 0; index < total; index += 1) {
-      if (!mountedRef.current || streamRunId.current !== currentRun) {
-        return;
-      }
-      const shellPlan = maybeBuildShellPlan();
-      if (shellPlan) {
-        await startShellStream(shellPlan);
-        continue;
-      }
-      if (secureRandomBetween(0, 4) === 0) {
-        const thoughtCount = secureRandomBetween(1, 2);
-        for (let t = 0; t < thoughtCount; t += 1) {
-          const thought = buildThinkingLine();
-          appendLines("thinking", [thought]);
-          setResponderWordCount((count) => count + countWords(thought));
-        }
-      }
-      const toolBlock = maybeBuildToolCalls();
-      if (toolBlock) {
-        appendToolBlock(toolBlock);
-      }
-      const line = buildResponderLine();
-      appendLines("responder", [line]);
-      setResponderWordCount((count) => count + countWords(line));
-      await sleep(secureRandomBetween(8, 28));
-    }
-
-    if (streamRunId.current === currentRun && mountedRef.current) {
-      setStreamState("idle");
-    }
-  }, [appendLines, appendToolBlock, mountedRef, setResponderWordCount, setStreamState, streamRunId, updateToolBlock]);
-}
-
 function useInputManager(
   textareaRef: RefObject<TextareaRenderable>,
   appendLines: (role: Role, textLines: string[]) => void,
   setPromptCount: StateSetter<number>,
   setAutoFollow: StateSetter<boolean>,
-  startStreamingResponder: () => Promise<void>,
+  startStreamingResponder: (prompt: string) => Promise<void>,
   refreshCompletion: () => void,
   clearCompletion: () => void,
   applyCompletion: () => void,
-  handleCommand: (command: string) => boolean,
+  handleCommand: (command: string) => Promise<boolean>,
   recordHistory: (prompt: string) => void
 ) {
   const [inputLineCount, setInputLineCount] = useState(MIN_INPUT_LINES);
@@ -221,7 +154,7 @@ function useInputManager(
     refreshCompletion();
   }, [refreshCompletion, textareaRef]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const editor = textareaRef.current;
     if (!editor) {
       return;
@@ -231,7 +164,7 @@ function useInputManager(
       return;
     }
     const trimmed = raw.trim();
-    if (handleCommand(trimmed)) {
+    if (await handleCommand(trimmed)) {
       recordHistory(raw);
       editor.clear();
       setInputLineCount(MIN_INPUT_LINES);
@@ -252,7 +185,7 @@ function useInputManager(
     setAutoFollow(true);
     clearCompletion();
     editor.submit();
-    void startStreamingResponder();
+    await startStreamingResponder(trimmed);
   }, [appendLines, clearCompletion, handleCommand, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
   const handleTabComplete = useCallback(
@@ -851,7 +784,7 @@ function useSuggestionKeybindings(
   moveSelection: (delta: number) => void,
   handleTabComplete: () => void,
   cancelStreaming: () => void,
-  clearInput: () => void,
+  clearInput: () => Promise<void>,
   isStreaming: () => boolean
 ): void {
   const hasSuggestions = suggestionCount > 0;
@@ -869,7 +802,7 @@ function useSuggestionKeybindings(
       if (isStreaming()) {
         cancelStreaming();
       } else {
-        clearInput();
+        void clearInput();
       }
     }
   });
@@ -894,6 +827,8 @@ export function App(): JSX.Element {
   const textareaRef = useRef<TextareaRenderable>(null);
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
+  const [sessionConfig, setSessionConfig] = useState<SessionConfig>({ provider: "openai" });
   const { themes, theme, setThemeBySlug } = useThemeManager();
   const renderer = useRenderer();
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } =
@@ -913,20 +848,57 @@ export function App(): JSX.Element {
     responderWordCount,
     setResponderWordCount,
     streamState,
-    setStreamState,
-    updateToolBlock
+    setStreamState
   } = useChatStore(makeLineId);
 
   useEffect(() => {
     setThemeSuggestions(themes.map((entry) => ({ slug: entry.slug, name: entry.name })));
   }, [themes]);
 
+  useEffect(() => {
+    listAvailableProfiles()
+      .then((profiles) => setProfileSuggestions(profiles))
+      .catch(() => {
+        return;
+      });
+  }, []);
+
+  const fetchModelItems = useCallback(async () => {
+    const missing = validateSessionConfig(sessionConfig, { requireModel: false });
+    if (missing.length > 0) {
+      return { items: [], messages: missing };
+    }
+    try {
+      const models = await listModels(sessionConfig);
+      const items = models.map((model) => ({ id: model.id, label: model.name || model.id }));
+      return { items };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { items: [], messages: [`Failed to load models: ${message}`] };
+    }
+  }, [sessionConfig]);
+
+  const fetchProviderItems = useCallback(async () => {
+    try {
+      const providers = await Promise.resolve(listProviders());
+      const items = providers.map((p) => ({ id: p.id, label: p.label }));
+      return { items };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { items: [], messages: [`Failed to load providers: ${message}`] };
+    }
+  }, []);
+
   const { modalOpen, modalElement, handleCommand: handleModalCommand } = useModalManager(
     appendLines,
     () => textareaRef.current?.focus(),
     themes,
     theme,
-    (next) => setThemeBySlug(next.slug)
+    (next) => setThemeBySlug(next.slug),
+    sessionConfig,
+    setSessionConfig,
+    fetchModelItems,
+    fetchProviderItems
   );
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
@@ -938,11 +910,11 @@ export function App(): JSX.Element {
   const startStreamingResponder = useStreamingResponder(
     appendLines,
     appendToolBlock,
-    updateToolBlock,
     setResponderWordCount,
     setStreamState,
     streamRunId,
-    mountedRef
+    mountedRef,
+    abortRef
   );
 
   const applyTheme = useCallback(
@@ -959,7 +931,15 @@ export function App(): JSX.Element {
   );
 
   const handleCommand = useCallback(
-    (command: string) => {
+    async (command: string) => {
+      const configResult = await applyConfigCommand(command, sessionConfig);
+      if (configResult.handled) {
+        setSessionConfig(configResult.nextConfig);
+        if (configResult.messages.length > 0) {
+          appendLines("responder", configResult.messages);
+        }
+        return true;
+      }
       if (command.startsWith("/theme")) {
         const parts = command.trim().split(/\s+/);
         if (parts.length === 1) {
@@ -971,11 +951,12 @@ export function App(): JSX.Element {
       }
       return handleModalCommand(command);
     },
-    [applyTheme, handleModalCommand]
+    [appendLines, applyTheme, handleModalCommand, sessionConfig]
   );
 
   const cancelStreaming = useCallback(() => {
     streamRunId.current += 1;
+    abortRef.current?.abort();
     setStreamState("idle");
   }, [setStreamState]);
 
@@ -984,7 +965,7 @@ export function App(): JSX.Element {
     appendLines,
     setPromptCount,
     setAutoFollow,
-    startStreamingResponder,
+    (prompt) => startStreamingResponder(prompt, sessionConfig),
     refreshCompletion,
     clearCompletion,
     applySelection,
@@ -1005,6 +986,7 @@ export function App(): JSX.Element {
     () => {
       textareaRef.current?.clear();
       enforceInputLineBounds();
+      return Promise.resolve();
     },
     () => streamState === "streaming"
   );
@@ -1049,11 +1031,6 @@ export function App(): JSX.Element {
 function clampInputLines(value: number): number {
   return Math.min(MAX_INPUT_LINES, Math.max(MIN_INPUT_LINES, value));
 }
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 
 function useSelectionClipboard(renderer: unknown): () => void {
   return useCallback(() => {
@@ -1083,26 +1060,78 @@ function buildOsc52(text: string): string {
   return osc52;
 }
 
-async function streamShellOutput(
-  plan: ShellPlan,
-  blockId: string,
-  runId: number,
-  updateToolBlock: (id: string, mutate: (block: ToolBlock) => ToolBlock) => void,
+function countWords(text: string): number {
+  const matches = text.trim().match(/\S+/g);
+  return matches ? matches.length : 0;
+}
+
+function useStreamingResponder(
+  appendLines: (role: Role, textLines: string[]) => void,
+  appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
+  setResponderWordCount: StateSetter<number>,
+  setStreamState: StateSetter<StreamState>,
   streamRunId: RefHandle<number>,
-  mountedRef: RefHandle<boolean>
-): Promise<void> {
-  for (const line of plan.output) {
-    if (!mountedRef.current || streamRunId.current !== runId) {
-      return;
-    }
-    updateToolBlock(blockId, (block) => ({
-      ...block,
-      lines: [...block.lines, `    ${line}`],
-      streaming: true
-    }));
-    await sleep(secureRandomBetween(6, 22));
+  mountedRef: RefHandle<boolean>,
+  abortRef: RefHandle<AbortController | null>
+) {
+  return useCallback(
+    async (prompt: string, session: SessionConfig) => {
+      const missing = validateSessionConfig(session);
+      if (missing.length > 0) {
+        appendLines("responder", missing);
+        return;
+      }
+
+      streamRunId.current += 1;
+      const currentRun = streamRunId.current;
+
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setStreamState("streaming");
+
+      try {
+        for await (const event of sendMessage(session, prompt, controller.signal)) {
+          if (!mountedRef.current || streamRunId.current !== currentRun) {
+            break;
+          }
+          handleAdapterEvent(event, appendLines, appendToolBlock, setResponderWordCount);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          const message = error instanceof Error ? error.message : String(error);
+          appendLines("responder", [`Error: ${message}`]);
+        }
+      } finally {
+        if (mountedRef.current && streamRunId.current === currentRun) {
+          setStreamState("idle");
+        }
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+        }
+      }
+    },
+    [appendLines, appendToolBlock, abortRef, mountedRef, setResponderWordCount, setStreamState, streamRunId]
+  );
+}
+
+function handleAdapterEvent(
+  event: AdapterEvent,
+  appendLines: (role: Role, textLines: string[]) => void,
+  appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
+  setResponderWordCount: StateSetter<number>
+): void {
+  if (event.type === "text") {
+    appendLines("responder", event.lines);
+    setResponderWordCount((count) => count + event.lines.reduce((sum, line) => sum + countWords(line), 0));
+    return;
   }
-  if (mountedRef.current && streamRunId.current === runId) {
-    updateToolBlock(blockId, (block) => ({ ...block, streaming: false }));
+  if (event.type === "thinking") {
+    appendLines("thinking", event.lines);
+    setResponderWordCount((count) => count + event.lines.reduce((sum, line) => sum + countWords(line), 0));
+    return;
   }
+  appendToolBlock({ lines: [event.header, ...event.lines], isBatch: false, scrollable: false });
 }

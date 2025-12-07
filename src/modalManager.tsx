@@ -1,10 +1,17 @@
 import type { JSX } from "react";
 import { useCallback, useMemo, useState } from "react";
-import { AuthModal, AUTH_DEFAULTS, MODEL_OPTIONS, PROVIDER_OPTIONS, SearchSelectModal, ThemeModal, type AuthOption } from "./modals";
+import { AuthModal, AUTH_DEFAULTS, SearchSelectModal, ThemeModal, type AuthOption } from "./modals";
 import type { ThemeDefinition } from "./theme";
 import type { SearchItem } from "./modalTypes";
+import type { SessionConfig, ProviderKey } from "./llxprtAdapter";
 
-type ModalState = { type: "none" } | { type: "model" } | { type: "provider" } | { type: "auth" } | { type: "theme" };
+type ModalState =
+  | { type: "none" }
+  | { type: "model"; items: SearchItem[] }
+  | { type: "provider"; items: SearchItem[] }
+  | { type: "auth" }
+  | { type: "theme" };
+
 const MODAL_COMMANDS: Record<string, ModalState["type"]> = {
   "/model": "model",
   "/provider": "provider",
@@ -17,28 +24,41 @@ export function useModalManager(
   focusInput: () => void,
   themes: ThemeDefinition[],
   currentTheme: ThemeDefinition,
-  onThemeSelect: (theme: ThemeDefinition) => void
-): { modalOpen: boolean; modalElement: JSX.Element | null; handleCommand: (command: string) => boolean } {
+  onThemeSelect: (theme: ThemeDefinition) => void,
+  sessionConfig: SessionConfig,
+  setSessionConfig: (next: SessionConfig) => void,
+  fetchModelItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>,
+  fetchProviderItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>
+): { modalOpen: boolean; modalElement: JSX.Element | null; handleCommand: (command: string) => Promise<boolean> } {
   const [modal, setModal] = useState<ModalState>({ type: "none" });
   const [authOptions, setAuthOptions] = useState<AuthOption[]>(AUTH_DEFAULTS);
+
   const closeModal = useCallback(() => {
     setModal({ type: "none" });
     focusInput();
   }, [focusInput]);
+
   const handleModelSelect = useCallback(
     (item: SearchItem) => {
+      setSessionConfig({ ...sessionConfig, model: item.id });
       appendLines("responder", [`Selected model: ${item.label}`]);
       closeModal();
     },
-    [appendLines, closeModal]
+    [appendLines, closeModal, sessionConfig, setSessionConfig]
   );
 
   const handleProviderSelect = useCallback(
     (item: SearchItem) => {
-      appendLines("responder", [`Selected provider: ${item.label}`]);
+      const id = item.id.toLowerCase() as ProviderKey;
+      if (id === "openai" || id === "gemini" || id === "anthropic") {
+        setSessionConfig({ ...sessionConfig, provider: id });
+        appendLines("responder", [`Selected provider: ${item.label}`]);
+      } else {
+        appendLines("responder", [`Unsupported provider: ${item.id}`]);
+      }
       closeModal();
     },
-    [appendLines, closeModal]
+    [appendLines, closeModal, sessionConfig, setSessionConfig]
   );
 
   const handleAuthSave = useCallback(
@@ -49,6 +69,7 @@ export function useModalManager(
     },
     [appendLines]
   );
+
   const modalElement: JSX.Element | null = useMemo(
     () =>
       renderModal(
@@ -65,16 +86,39 @@ export function useModalManager(
       ),
     [appendLines, authOptions, closeModal, currentTheme, handleAuthSave, handleModelSelect, handleProviderSelect, modal, onThemeSelect, themes]
   );
+
   const handleCommand = useCallback(
-    (command: string) => {
-      const modalType = MODAL_COMMANDS[command];
-      if (modalType && modalType !== "none") {
-        setModal({ type: modalType });
+    async (command: string) => {
+      const modalType = MODAL_COMMANDS[command.trim()];
+      if (!modalType || modalType === "none") {
+        return false;
+      }
+      if (modalType === "model") {
+        const result = await fetchModelItems();
+        if (result.messages?.length) {
+          appendLines("responder", result.messages);
+        }
+        if (result.items.length === 0) {
+          return true;
+        }
+        setModal({ type: "model", items: result.items });
         return true;
       }
-      return false;
+      if (modalType === "provider") {
+        const result = await fetchProviderItems();
+        if (result.messages?.length) {
+          appendLines("responder", result.messages);
+        }
+        if (result.items.length === 0) {
+          return true;
+        }
+        setModal({ type: "provider", items: result.items });
+        return true;
+      }
+      setModal({ type: modalType });
+      return true;
     },
-    []
+    [appendLines, fetchModelItems, fetchProviderItems]
   );
 
   return { modalOpen: modal.type !== "none", modalElement, handleCommand };
@@ -98,7 +142,7 @@ function renderModal(
         <SearchSelectModal
           title="Search Models"
           noun="models"
-          items={MODEL_OPTIONS}
+          items={modal.items}
           alphabetical
           footerHint="Tab to switch modes"
           onClose={closeModal}
@@ -111,7 +155,7 @@ function renderModal(
         <SearchSelectModal
           title="Select Provider"
           noun="providers"
-          items={PROVIDER_OPTIONS}
+          items={modal.items}
           alphabetical
           footerHint="Tab to switch modes"
           onClose={closeModal}

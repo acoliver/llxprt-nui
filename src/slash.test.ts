@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractSlashContext, getSlashSuggestions } from "./slash";
+import { extractSlashContext, getSlashSuggestions, setProfileSuggestions } from "./slash";
 
 describe("slash suggestions", () => {
   it("lists root commands on bare slash", () => {
@@ -25,6 +25,20 @@ describe("slash suggestions", () => {
   it("returns children for set", () => {
     const suggestions = getSlashSuggestions(["set", "emo"], 5);
     expect(suggestions[0]?.value).toBe("emojifilter");
+  });
+
+  it("includes new config commands", () => {
+    const root = getSlashSuggestions(["b"], 10).map((s) => s.value);
+    expect(root).toContain("baseurl");
+    expect(getSlashSuggestions(["k"], 10).some((s) => s.value === "key")).toBe(true);
+  });
+
+  it("returns profile load suggestions", () => {
+    setProfileSuggestions(["synthetic", "custom"]);
+    const level1 = getSlashSuggestions(["profile", "l"], 5);
+    expect(level1.some((s) => s.value === "load")).toBe(true);
+    const level2 = getSlashSuggestions(["profile", "load", "s"], 5);
+    expect(level2.some((s) => s.value === "synthetic")).toBe(true);
   });
 
   it("returns grandchildren for set emojifilter", () => {
