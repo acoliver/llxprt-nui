@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { useCommand } from "../providers/CommandProvider";
+import { useCommand } from "../uicontext";
 import { SearchSelectModal } from "../ui/modals";
 import type { SearchItem } from "../ui/modals/types";
 import type { SessionConfig, ProviderKey } from "../features/config";

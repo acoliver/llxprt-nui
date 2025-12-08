@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type JSX } from "react";
-import { useCommand } from "../providers/CommandProvider";
+import { useCommand } from "../uicontext";
 import { ThemeModal } from "../ui/modals";
 import type { ThemeDefinition } from "../features/theme";
 

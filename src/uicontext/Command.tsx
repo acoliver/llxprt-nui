@@ -1,12 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import type { DialogContextValue } from "./Dialog";
 
-interface DialogContextValue {
-  readonly replace: (element: JSX.Element) => void;
-  readonly clear: () => void;
-  readonly isOpen: boolean;
-}
-
-interface Command {
+interface CommandDef {
   readonly name: string;
   readonly title: string;
   readonly category?: string;
@@ -14,9 +9,9 @@ interface Command {
 }
 
 interface CommandContextValue {
-  readonly register: (commands: Command[]) => () => void;
+  readonly register: (commands: CommandDef[]) => () => void;
   readonly trigger: (name: string) => Promise<boolean>;
-  readonly getCommands: () => Command[];
+  readonly getCommands: () => CommandDef[];
 }
 
 const CommandContext = createContext<CommandContextValue | null>(null);
@@ -24,23 +19,23 @@ const CommandContext = createContext<CommandContextValue | null>(null);
 export function useCommand(): CommandContextValue {
   const context = useContext(CommandContext);
   if (context === null) {
-    throw new Error("useCommand must be used within CommandProvider");
+    throw new Error("useCommand must be used within Command");
   }
   return context;
 }
 
-interface CommandProviderProps {
+interface CommandProps {
   readonly children: ReactNode;
   readonly dialogContext: DialogContextValue;
 }
 
 let registrationId = 0;
 
-export function CommandProvider({ children, dialogContext }: CommandProviderProps): JSX.Element {
-  const [commands, setCommands] = useState<Map<string, Command>>(new Map());
+export function Command({ children, dialogContext }: CommandProps): JSX.Element {
+  const [commands, setCommands] = useState<Map<string, CommandDef>>(new Map());
   const mountedComponents = useRef(new Set<number>());
 
-  const register = useCallback((newCommands: Command[]) => {
+  const register = useCallback((newCommands: CommandDef[]) => {
     registrationId += 1;
     const componentId = registrationId;
     mountedComponents.current.add(componentId);
@@ -77,7 +72,7 @@ export function CommandProvider({ children, dialogContext }: CommandProviderProp
     [commands, dialogContext]
   );
 
-  const getCommands = useCallback((): Command[] => {
+  const getCommands = useCallback((): CommandDef[] => {
     return Array.from(commands.values());
   }, [commands]);
 
@@ -93,4 +88,4 @@ export function CommandProvider({ children, dialogContext }: CommandProviderProp
   );
 }
 
-export type { Command };
+export type { CommandDef };

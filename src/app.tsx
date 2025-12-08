@@ -24,8 +24,7 @@ import {
 import { ChatLayout } from "./ui/components/ChatLayout";
 import { buildStatusLabel } from "./ui/components/StatusBar";
 import { CommandComponents } from "./ui/components/CommandComponents";
-import { DialogProvider, useDialog } from "./providers/DialogProvider";
-import { CommandProvider, useCommand } from "./providers/CommandProvider";
+import { Dialog, useDialog, Command, useCommand } from "./uicontext";
 
 const HEADER_TEXT = "LLxprt Code - I'm here to help";
 
@@ -100,19 +99,19 @@ function AppInner(): JSX.Element {
   );
 }
 
-function AppWithProviders(): JSX.Element {
+function AppWithCommand(): JSX.Element {
   const dialog = useDialog();
   return (
-    <CommandProvider dialogContext={dialog}>
+    <Command dialogContext={dialog}>
       <AppInner />
-    </CommandProvider>
+    </Command>
   );
 }
 
 export function App(): JSX.Element {
   return (
-    <DialogProvider>
-      <AppWithProviders />
-    </DialogProvider>
+    <Dialog>
+      <AppWithCommand />
+    </Dialog>
   );
 }

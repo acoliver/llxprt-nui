@@ -12,16 +12,16 @@ const DialogContext = createContext<DialogContextValue | null>(null);
 export function useDialog(): DialogContextValue {
   const context = useContext(DialogContext);
   if (context === null) {
-    throw new Error("useDialog must be used within DialogProvider");
+    throw new Error("useDialog must be used within Dialog");
   }
   return context;
 }
 
-interface DialogProviderProps {
+interface DialogProps {
   readonly children: ReactNode;
 }
 
-export function DialogProvider({ children }: DialogProviderProps): JSX.Element {
+export function Dialog({ children }: DialogProps): JSX.Element {
   const [dialogStack, setDialogStack] = useState<JSX.Element[]>([]);
 
   const replace = useCallback((element: JSX.Element) => {
@@ -50,3 +50,5 @@ export function DialogProvider({ children }: DialogProviderProps): JSX.Element {
     </DialogContext.Provider>
   );
 }
+
+export type { DialogContextValue };
