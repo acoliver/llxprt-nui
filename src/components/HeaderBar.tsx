@@ -1,14 +1,12 @@
-import { appendFileSync } from "node:fs";
 import path from "node:path";
 import type { JSX } from "react";
 import { useRenderer } from "@opentui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ThemeDefinition } from "../theme";
 
 const LOGO_PATH = path.resolve(process.cwd(), "llxprt.png");
 const LOGO_PX_WIDTH = 150;
 const LOGO_PX_HEIGHT = 90;
-const HEADER_LOG_PATH = path.resolve(process.cwd(), "log/header-metrics.log");
 
 interface HeaderBarProps {
   readonly text: string;
@@ -17,26 +15,17 @@ interface HeaderBarProps {
 
 export function HeaderBar({ text, theme }: HeaderBarProps): JSX.Element {
   const renderer = useRenderer();
-  const [, setMetricTick] = useState(0);
-  const lastResolution = useRef<string | null>(null);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
-    const bump = () => setMetricTick((tick) => tick + 1);
-    renderer.on("capabilities", bump);
-    renderer.on("pixelResolution", bump);
-    renderer.on("resize", bump);
-    const interval = setInterval(() => {
-      const current = renderer.resolution ? JSON.stringify(renderer.resolution) : null;
-      if (current !== lastResolution.current) {
-        lastResolution.current = current;
-        setMetricTick((tick) => tick + 1);
-      }
-    }, 500);
+    const refresh = () => setTick((t) => t + 1);
+    renderer.on("capabilities", refresh);
+    renderer.on("pixelResolution", refresh);
+    renderer.on("resize", refresh);
     return () => {
-      renderer.off("capabilities", bump);
-      renderer.off("pixelResolution", bump);
-      renderer.off("resize", bump);
-      clearInterval(interval);
+      renderer.off("capabilities", refresh);
+      renderer.off("pixelResolution", refresh);
+      renderer.off("resize", refresh);
     };
   }, [renderer]);
 
@@ -59,25 +48,6 @@ export function HeaderBar({ text, theme }: HeaderBarProps): JSX.Element {
   const logoWidthCells = Math.max(1, Math.ceil(scaledPixelWidth / effPxPerCellX));
   const logoHeightCells = Math.max(1, Math.ceil(scaledPixelHeight / effPxPerCellY));
   const headerHeight = Math.max(logoHeightCells + 1, 3);
-
-  useEffect(() => {
-    const logLine = JSON.stringify(
-      {
-        pixelResolution: resolution ?? null,
-        terminal: { cols: renderer.terminalWidth, rows: renderer.terminalHeight },
-        pxPerCellX: pxPerCellX ?? null,
-        pxPerCellY: pxPerCellY ?? null,
-        logo: {
-          pixel: { width: scaledPixelWidth, height: scaledPixelHeight },
-          cells: { width: logoWidthCells, height: logoHeightCells }
-        },
-        headerHeight
-      },
-      null,
-      0
-    );
-    appendFileSync(HEADER_LOG_PATH, `${logLine}\n`, "utf8");
-  }, [resolution, pxPerCellX, pxPerCellY, scaledPixelWidth, scaledPixelHeight, logoWidthCells, logoHeightCells, headerHeight, renderer.terminalWidth, renderer.terminalHeight]);
 
   return (
     <box
