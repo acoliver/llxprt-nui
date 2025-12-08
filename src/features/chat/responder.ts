@@ -1,4 +1,4 @@
-import { secureRandomBetween } from "./random";
+import { secureRandomBetween } from "../../lib/random";
 
 export interface ToolCallBlock {
   readonly lines: string[];

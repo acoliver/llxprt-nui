@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { ThemeDefinition } from "../theme";
+import type { ThemeDefinition } from "../../features/theme";
 
 export interface SelectableListItemProps {
   readonly label: string;

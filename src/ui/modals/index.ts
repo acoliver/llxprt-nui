@@ -1,11 +1,11 @@
-export { ModalShell, type ModalShellProps } from "./modalShell";
-export { SearchSelectModal, type SearchSelectProps } from "./searchSelectModal";
-export { AuthModal, type AuthOption } from "./authModal";
-export { ThemeModal } from "./themeModal";
-export { filterItems, type SearchItem } from "./modalTypes";
+export { ModalShell, type ModalShellProps } from "./ModalShell";
+export { SearchSelectModal, type SearchSelectProps } from "./SearchSelectModal";
+export { AuthModal, type AuthOption } from "./AuthModal";
+export { ThemeModal } from "./ThemeModal";
+export { filterItems, type SearchItem } from "./types";
 
 // Default auth options used by the auth dialog
-import type { AuthOption } from "./authModal";
+import type { AuthOption } from "./AuthModal";
 export const AUTH_DEFAULTS: AuthOption[] = [
   { id: "gemini", label: "1. Gemini (Google OAuth)", enabled: true },
   { id: "qwen", label: "2. Qwen (OAuth)", enabled: true },

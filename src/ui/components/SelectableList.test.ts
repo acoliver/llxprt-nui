@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SelectableListItemProps } from "./SelectableList";
-import type { ThemeDefinition } from "../theme";
+import type { ThemeDefinition } from "../../features/theme";
 
 describe("SelectableListItem", () => {
   const mockTheme: ThemeDefinition = {

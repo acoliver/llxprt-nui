@@ -1,12 +1,12 @@
 import type { TextareaRenderable } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useMemo, useRef, useState, type JSX } from "react";
-import { useFilteredList } from "./hooks/useListNavigation";
-import { type SearchItem } from "./modalTypes";
-import { ModalShell } from "./modalShell";
-import type { ThemeDefinition } from "./theme";
-import { FilterInput } from "./components/FilterInput";
-import { SelectableListItem } from "./components/SelectableList";
+import { useFilteredList } from "../../hooks/useListNavigation";
+import { type SearchItem } from "./types";
+import { ModalShell } from "./ModalShell";
+import type { ThemeDefinition } from "../../features/theme";
+import { FilterInput } from "../components/FilterInput";
+import { SelectableListItem } from "../components/SelectableList";
 
 const GRID_COLUMNS = 3;
 const SEARCH_PAGE_SIZE = GRID_COLUMNS * 6;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FilterInputProps } from "./FilterInput";
-import type { ThemeDefinition } from "../theme";
+import type { ThemeDefinition } from "../../features/theme";
 
 describe("FilterInput", () => {
   const mockTheme: ThemeDefinition = {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type JSX } from "react";
 import { useCommand } from "../providers/CommandProvider";
-import { ThemeModal } from "../themeModal";
-import type { ThemeDefinition } from "../theme";
+import { ThemeModal } from "../ui/modals";
+import type { ThemeDefinition } from "../features/theme";
 
 interface ThemeCommandProps {
   readonly themes: ThemeDefinition[];

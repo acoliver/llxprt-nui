@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { getLogger } from "./logger";
+import { getLogger } from "../../lib/logger";
 
 export type ThemeKind = "light" | "dark" | "ansi" | "custom";
 

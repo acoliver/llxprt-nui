@@ -1,9 +1,9 @@
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useState, type JSX } from "react";
-import { useListNavigation } from "./hooks/useListNavigation";
-import { ModalShell } from "./modalShell";
-import type { ThemeDefinition } from "./theme";
-import { SelectableListItem } from "./components/SelectableList";
+import { useListNavigation } from "../../hooks/useListNavigation";
+import { ModalShell } from "./ModalShell";
+import type { ThemeDefinition } from "../../features/theme";
+import { SelectableListItem } from "../components/SelectableList";
 
 export interface AuthOption {
   readonly id: string;

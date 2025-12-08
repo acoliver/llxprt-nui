@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
-import { getLogger } from "../src/logger";
+import { getLogger } from "../src/lib/logger";
 
 type ViolationLevel = "warn" | "error";
 

@@ -1,8 +1,8 @@
 import { useCallback } from "react";
-import type { SessionConfig } from "../llxprtAdapter";
-import { listModels, listProviders } from "../llxprtAdapter";
-import { applyConfigCommand, validateSessionConfig } from "../llxprtConfig";
-import { findTheme, type ThemeDefinition } from "../theme";
+import type { SessionConfig } from "../features/config";
+import { listModels, listProviders } from "../features/config";
+import { applyConfigCommand, validateSessionConfig } from "../features/config";
+import { findTheme, type ThemeDefinition } from "../features/theme";
 
 interface ItemFetchResult {
   items: { id: string; label: string }[];

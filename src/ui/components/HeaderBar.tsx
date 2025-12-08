@@ -2,7 +2,7 @@ import path from "node:path";
 import type { JSX } from "react";
 import { useRenderer } from "@opentui/react";
 import { useEffect, useState } from "react";
-import type { ThemeDefinition } from "../theme";
+import type { ThemeDefinition } from "../../features/theme";
 
 const LOGO_PATH = path.resolve(process.cwd(), "llxprt.png");
 const LOGO_PX_WIDTH = 150;

@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { useCallback, useRef } from "react";
-import type { SessionConfig } from "../llxprtAdapter";
+import type { SessionConfig } from "../features/config";
 import { useStreamingResponder } from "./useStreamingResponder";
 
 interface UseStreamingLifecycleResult {

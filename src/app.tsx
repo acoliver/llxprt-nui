@@ -2,11 +2,11 @@ import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { JSX } from "react";
 import { useRenderer } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useCompletionManager } from "./completions";
-import { usePromptHistory } from "./history";
-import { useThemeManager } from "./themeManager";
-import type { ThemeDefinition } from "./theme";
-import type { SessionConfig } from "./llxprtAdapter";
+import { useCompletionManager } from "./features/completion";
+import { usePromptHistory } from "./features/chat";
+import { useThemeManager } from "./features/theme";
+import type { ThemeDefinition } from "./features/theme";
+import type { SessionConfig } from "./features/config";
 import { useChatStore } from "./hooks/useChatStore";
 import { useInputManager } from "./hooks/useInputManager";
 import { useScrollManagement } from "./hooks/useScrollManagement";
@@ -21,9 +21,9 @@ import {
   useLineIdGenerator,
   useHistoryNavigation
 } from "./hooks/useKeyboardHandlers";
-import { ChatLayout } from "./components/ChatLayout";
-import { buildStatusLabel } from "./components/StatusBar";
-import { CommandComponents } from "./components/CommandComponents";
+import { ChatLayout } from "./ui/components/ChatLayout";
+import { buildStatusLabel } from "./ui/components/StatusBar";
+import { CommandComponents } from "./ui/components/CommandComponents";
 import { DialogProvider, useDialog } from "./providers/DialogProvider";
 import { CommandProvider, useCommand } from "./providers/CommandProvider";
 

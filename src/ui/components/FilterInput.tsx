@@ -1,7 +1,7 @@
 import type { TextareaRenderable } from "@opentui/core";
 import { parseColor, stringToStyledText } from "@opentui/core";
 import { useCallback, useEffect, useMemo, type JSX, type RefObject } from "react";
-import type { ThemeDefinition } from "../theme";
+import type { ThemeDefinition } from "../../features/theme";
 
 export interface FilterInputProps {
   readonly textareaRef: RefObject<TextareaRenderable | null>;

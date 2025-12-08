@@ -1,9 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import type { Role, StreamState } from "./useChatStore";
-import type { SessionConfig, AdapterEvent } from "../llxprtAdapter";
-import { sendMessage } from "../llxprtAdapter";
-import { validateSessionConfig } from "../llxprtConfig";
+import type { SessionConfig, AdapterEvent } from "../features/config";
+import { sendMessage } from "../features/config";
+import { validateSessionConfig } from "../features/config";
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 

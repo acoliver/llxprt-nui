@@ -1,11 +1,11 @@
 import type { JSX } from "react";
-import type { SessionConfig } from "../llxprtAdapter";
-import type { ThemeDefinition } from "../theme";
-import type { SearchItem } from "../modalTypes";
-import { ModelCommand } from "../commands/ModelCommand";
-import { ProviderCommand } from "../commands/ProviderCommand";
-import { ThemeCommand } from "../commands/ThemeCommand";
-import { AuthCommand } from "../commands/AuthCommand";
+import type { SessionConfig } from "../../features/config";
+import type { ThemeDefinition } from "../../features/theme";
+import type { SearchItem } from "../modals/types";
+import { ModelCommand } from "../../commands/ModelCommand";
+import { ProviderCommand } from "../../commands/ProviderCommand";
+import { ThemeCommand } from "../../commands/ThemeCommand";
+import { AuthCommand } from "../../commands/AuthCommand";
 
 interface CommandComponentsProps {
   readonly fetchModelItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useCommand } from "../providers/CommandProvider";
-import { SearchSelectModal } from "../searchSelectModal";
-import type { SearchItem } from "../modalTypes";
-import type { SessionConfig, ProviderKey } from "../llxprtAdapter";
-import type { ThemeDefinition } from "../theme";
+import { SearchSelectModal } from "../ui/modals";
+import type { SearchItem } from "../ui/modals/types";
+import type { SessionConfig, ProviderKey } from "../features/config";
+import type { ThemeDefinition } from "../features/theme";
 
 interface ProviderCommandProps {
   readonly fetchProviderItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;

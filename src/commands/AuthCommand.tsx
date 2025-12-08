@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useCommand } from "../providers/CommandProvider";
-import { AuthModal, AUTH_DEFAULTS, type AuthOption } from "../modals";
-import type { ThemeDefinition } from "../theme";
+import { AuthModal, AUTH_DEFAULTS, type AuthOption } from "../ui/modals";
+import type { ThemeDefinition } from "../features/theme";
 
 interface AuthCommandProps {
   readonly appendLines: (role: "user" | "responder", lines: string[]) => void;

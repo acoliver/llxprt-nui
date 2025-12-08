@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterItems, type SearchItem } from "./modalTypes";
+import { filterItems, type SearchItem } from "./types";
 
 const SAMPLE_ITEMS: SearchItem[] = [
   { id: "a", label: "Alpha" },

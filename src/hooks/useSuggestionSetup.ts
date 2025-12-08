@@ -1,7 +1,7 @@
 import { useEffect } from "react";
-import { setThemeSuggestions, setProfileSuggestions } from "../slash";
-import { listAvailableProfiles } from "../llxprtConfig";
-import type { ThemeDefinition } from "../theme";
+import { setThemeSuggestions, setProfileSuggestions } from "../features/completion";
+import { listAvailableProfiles } from "../features/config";
+import type { ThemeDefinition } from "../features/theme";
 
 export function useSuggestionSetup(themes: ThemeDefinition[]): void {
   useEffect(() => {

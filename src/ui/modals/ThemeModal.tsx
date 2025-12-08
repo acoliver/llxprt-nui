@@ -1,11 +1,11 @@
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { TextareaRenderable } from "@opentui/core";
-import { useListNavigation } from "./hooks/useListNavigation";
-import { ModalShell } from "./modalShell";
-import type { ThemeDefinition } from "./theme";
-import { FilterInput } from "./components/FilterInput";
-import { SelectableListItem } from "./components/SelectableList";
+import { useListNavigation } from "../../hooks/useListNavigation";
+import { ModalShell } from "./ModalShell";
+import type { ThemeDefinition } from "../../features/theme";
+import { FilterInput } from "../components/FilterInput";
+import { SelectableListItem } from "../components/SelectableList";
 
 export interface ThemeModalProps {
   readonly themes: ThemeDefinition[];

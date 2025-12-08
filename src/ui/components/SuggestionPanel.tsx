@@ -1,7 +1,7 @@
 import type { JSX } from "react";
-import { MAX_SUGGESTION_COUNT } from "../suggestions";
-import type { CompletionSuggestion } from "../completions";
-import type { ThemeDefinition } from "../theme";
+import { MAX_SUGGESTION_COUNT } from "../../features/completion";
+import type { CompletionSuggestion } from "../../features/completion";
+import type { ThemeDefinition } from "../../features/theme";
 
 export interface SuggestionPanelProps {
   readonly suggestions: CompletionSuggestion[];
