@@ -1,0 +1,58 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useCommand } from "../providers/CommandProvider";
+import { AuthModal, AUTH_DEFAULTS, type AuthOption } from "../modals";
+import type { ThemeDefinition } from "../theme";
+
+interface AuthCommandProps {
+  readonly appendLines: (role: "user" | "responder", lines: string[]) => void;
+  readonly theme: ThemeDefinition;
+  readonly focusInput: () => void;
+}
+
+export function AuthCommand({ appendLines, theme, focusInput }: AuthCommandProps): JSX.Element | null {
+  const { register } = useCommand();
+  const [authOptions, setAuthOptions] = useState<AuthOption[]>(AUTH_DEFAULTS);
+  const dialogClearRef = useRef<(() => void) | null>(null);
+
+  const handleSave = useCallback((next: AuthOption[]): void => {
+    setAuthOptions(next);
+    const enabled = next
+      .filter((opt) => opt.id !== "close" && opt.enabled)
+      .map((opt) => opt.label.replace(/^\d+\.\s*/, ""));
+    appendLines("responder", [`Auth providers: ${enabled.join(", ") || "none"}`]);
+  }, [appendLines]);
+
+  const handleClose = useCallback((): void => {
+    if (dialogClearRef.current !== null) {
+      dialogClearRef.current();
+    }
+    focusInput();
+  }, [focusInput]);
+
+  const modal = useMemo(() => (
+    <AuthModal
+      options={authOptions}
+      onClose={handleClose}
+      onSave={handleSave}
+      theme={theme}
+    />
+  ), [authOptions, handleClose, handleSave, theme]);
+
+  useEffect(() => {
+    const cleanup = register([
+      {
+        name: "/auth",
+        title: "OAuth Authentication",
+        category: "authentication",
+        onExecute: (dialog) => {
+          dialogClearRef.current = dialog.clear;
+          dialog.replace(modal);
+        }
+      }
+    ]);
+
+    return cleanup;
+  }, [register, modal]);
+
+  return null;
+}

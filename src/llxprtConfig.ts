@@ -131,41 +131,81 @@ function applyModel(argument: string, current: SessionConfig): ConfigCommandResu
   };
 }
 
-async function applyProfile(args: string[], current: SessionConfig, options?: ApplyOptions): Promise<ConfigCommandResult> {
+interface ParsedProfileArgs {
+  readonly action: string;
+  readonly name: string;
+}
+
+interface ProfileValidationError {
+  readonly error: string;
+}
+
+type ProfileArgResult = ParsedProfileArgs | ProfileValidationError;
+
+function parseProfileArgs(args: string[]): ProfileArgResult {
   if (args.length === 0) {
-    return { handled: true, nextConfig: current, messages: ["Profile name is required. Usage: /profile load <name>"] };
+    return { error: "Profile name is required. Usage: /profile load <name>" };
   }
   const [action, name] = args.length === 1 ? ["load", args[0]] : [args[0], args[1]];
   if (action?.toLowerCase() !== "load") {
-    return { handled: true, nextConfig: current, messages: ["Usage: /profile load <name>"] };
+    return { error: "Usage: /profile load <name>" };
   }
   if (!name) {
-    return { handled: true, nextConfig: current, messages: ["Profile name is required. Usage: /profile load <name>"] };
+    return { error: "Profile name is required. Usage: /profile load <name>" };
+  }
+  return { action, name };
+}
+
+interface ProfileData {
+  readonly provider?: string;
+  readonly baseUrl?: string;
+  readonly model?: string;
+  readonly authKeyfile?: string;
+  readonly ephemeralSettings?: Record<string, unknown>;
+}
+
+function mapProfileToSessionConfig(profile: ProfileData): Partial<SessionConfig> | null {
+  const ephemeral = profile.ephemeralSettings ?? {};
+  const provider = normalizeProvider(profile.provider);
+  const baseUrl = (ephemeral["base-url"] ?? ephemeral.baseUrl ?? profile.baseUrl) as string | undefined;
+  const keyFilePath = (ephemeral["auth-keyfile"] ?? ephemeral.authKeyfile ?? profile.authKeyfile) as string | undefined;
+  const model = (ephemeral.model ?? profile.model) as string | undefined;
+
+  if (!provider || !baseUrl || !keyFilePath || !model) {
+    return null;
+  }
+
+  return { provider, baseUrl, keyFilePath, model, apiKey: undefined };
+}
+
+function validateProfileConfig(config: Partial<SessionConfig> | null): string | null {
+  if (config === null) {
+    return "Synthetic profile is incomplete; need provider, base-url, auth-keyfile, and model.";
+  }
+  return null;
+}
+
+async function applyProfile(args: string[], current: SessionConfig, options?: ApplyOptions): Promise<ConfigCommandResult> {
+  const parsed = parseProfileArgs(args);
+  if ("error" in parsed) {
+    return { handled: true, nextConfig: current, messages: [parsed.error] };
   }
 
   const profileDir = options?.profileDir ?? path.dirname(SYNTHETIC_PROFILE_DEFAULT);
   const manager = options?.profileManager ?? new ProfileManager(profileDir);
-  try {
-    const profile = await manager.loadProfile(name);
-    const ephemeral = profile.ephemeralSettings;
-    const provider = normalizeProvider(profile.provider);
-    const baseUrl = (ephemeral["base-url"] ?? ephemeral.baseUrl ?? profile.baseUrl) as string | undefined;
-    const keyFilePath = (ephemeral["auth-keyfile"] ?? ephemeral.authKeyfile ?? profile.authKeyfile) as
-      | string
-      | undefined;
-    const model = (ephemeral.model ?? profile.model) as string | undefined;
 
-    if (!provider || !baseUrl || !keyFilePath || !model) {
-      return {
-        handled: true,
-        nextConfig: current,
-        messages: ["Synthetic profile is incomplete; need provider, base-url, auth-keyfile, and model."]
-      };
+  try {
+    const profile = await manager.loadProfile(parsed.name);
+    const config = mapProfileToSessionConfig(profile as ProfileData);
+    const error = validateProfileConfig(config);
+
+    if (error !== null) {
+      return { handled: true, nextConfig: current, messages: [error] };
     }
 
     return {
       handled: true,
-      nextConfig: { ...current, provider, baseUrl, keyFilePath, model, apiKey: undefined },
+      nextConfig: { ...current, ...config },
       messages: ["Loaded synthetic profile"]
     };
   } catch (error) {
