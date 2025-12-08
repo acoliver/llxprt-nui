@@ -80,8 +80,12 @@ interface InputAreaProps {
   readonly theme: ThemeDefinition;
 }
 
-export function renderChatLine(line: ChatLine, theme: ThemeDefinition): JSX.Element {
-  return renderMessage(line.role, line.id, line.text, theme);
+export function renderChatLine(line: ChatLine, theme: ThemeDefinition, isLastInGroup: boolean): JSX.Element {
+  const message = renderMessage(line.role, line.id, line.text, theme);
+  if (isLastInGroup && line.role === "model") {
+    return <box key={`${line.id}-wrap`} style={{ marginBottom: 1 }}>{message}</box>;
+  }
+  return message;
 }
 
 export function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element {
@@ -143,6 +147,21 @@ export function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.E
   );
 }
 
+function isLastInGroup(lines: (ChatLine | ToolBlock)[], index: number): boolean {
+  const current = lines[index];
+  if (current.kind !== "line") {
+    return false;
+  }
+  const next = lines[index + 1];
+  if (next === undefined) {
+    return true;
+  }
+  if (next.kind !== "line") {
+    return true;
+  }
+  return next.role !== current.role;
+}
+
 function ScrollbackView(props: ScrollbackProps): JSX.Element {
   return (
     <scrollbox
@@ -167,8 +186,10 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
       focused
       >
         <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
-          {props.lines.map((entry) =>
-            entry.kind === "line" ? renderChatLine(entry, props.theme) : renderToolBlock(entry, props.theme)
+          {props.lines.map((entry, index) =>
+            entry.kind === "line"
+              ? renderChatLine(entry, props.theme, isLastInGroup(props.lines, index))
+              : renderToolBlock(entry, props.theme)
           )}
         </box>
       </scrollbox>
