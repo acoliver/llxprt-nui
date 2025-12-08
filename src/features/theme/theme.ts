@@ -55,7 +55,7 @@ export interface ThemeColors {
     readonly userBorder: string;
     readonly systemBorder: string;
     readonly systemText: string;
-    readonly groupSpacing?: number;
+    readonly systemBg?: string;
   };
 }
 

@@ -52,7 +52,8 @@
     "message": {
       "userBorder": "bluebright",
       "systemBorder": "yellow",
-      "systemText": "yellow"
+      "systemText": "yellow",
+      "systemBg": "#1a1a1a"
     }
   }
 }

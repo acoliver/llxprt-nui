@@ -14,7 +14,7 @@ export function UserMessage(props: Readonly<UserMessageProps>): JSX.Element {
         bottomLeft: "╹",
         topLeft: "╻",
       }}
-      style={{ paddingLeft: 1 }}
+      style={{ paddingLeft: 1, marginBottom: 1 }}
     >
       <text fg={props.theme.colors.text.user}>{props.text}</text>
     </box>

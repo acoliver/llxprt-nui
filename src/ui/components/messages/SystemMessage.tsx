@@ -3,6 +3,7 @@ import type { SystemMessageProps } from "./types";
 import { EmptyBorder } from "./types";
 
 export function SystemMessage(props: Readonly<SystemMessageProps>): JSX.Element {
+  const bgColor = props.theme.colors.message.systemBg;
   return (
     <box
       key={props.id}
@@ -14,9 +15,9 @@ export function SystemMessage(props: Readonly<SystemMessageProps>): JSX.Element 
         bottomLeft: "╵",
         topLeft: "╷",
       }}
-      style={{ paddingLeft: 1 }}
+      style={{ paddingLeft: 1, marginBottom: 1, backgroundColor: bgColor }}
     >
-      <text fg={props.theme.colors.message.systemText}>{props.text}</text>
+      <text fg={props.theme.colors.message.systemText} bg={bgColor}>{props.text}</text>
     </box>
   );
 }

@@ -52,7 +52,8 @@
     "message": {
       "userBorder": "#e5e7eb",
       "systemBorder": "#e5e7eb",
-      "systemText": "#e5e7eb"
+      "systemText": "#e5e7eb",
+      "systemBg": "#1a2435"
     }
   }
 }
