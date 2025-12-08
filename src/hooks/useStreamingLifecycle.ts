@@ -12,7 +12,7 @@ interface UseStreamingLifecycleResult {
 }
 
 export function useStreamingLifecycle(
-  appendLines: (role: "user" | "responder" | "thinking", lines: string[]) => void,
+  appendLines: (role: "user" | "model" | "thinking", lines: string[]) => void,
   appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
   setResponderWordCount: (count: number) => void,
   setStreamState: (state: "idle" | "streaming") => void

@@ -7,9 +7,9 @@ import type { ThemeDefinition } from "../../features/theme";
 import { HeaderBar } from "./HeaderBar";
 import { StatusBar } from "./StatusBar";
 import { SuggestionPanel } from "./SuggestionPanel";
-import { renderMessage, migrateRole } from "./messages";
+import { renderMessage, type MessageRole } from "./messages";
 
-type Role = "user" | "responder" | "thinking" | "model" | "system";
+type Role = MessageRole;
 type StreamState = "idle" | "streaming";
 
 interface ChatLine {
@@ -81,8 +81,7 @@ interface InputAreaProps {
 }
 
 export function renderChatLine(line: ChatLine, theme: ThemeDefinition): JSX.Element {
-  const migratedRole = migrateRole(line.role);
-  return renderMessage(migratedRole, line.id, line.text, theme);
+  return renderMessage(line.role, line.id, line.text, theme);
 }
 
 export function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element {

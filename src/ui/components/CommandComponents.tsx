@@ -12,7 +12,7 @@ interface CommandComponentsProps {
   readonly fetchProviderItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;
   readonly sessionConfig: SessionConfig;
   readonly setSessionConfig: (config: SessionConfig) => void;
-  readonly appendLines: (role: "user" | "responder", lines: string[]) => void;
+  readonly appendLines: (role: "user" | "model", lines: string[]) => void;
   readonly themes: ThemeDefinition[];
   readonly currentTheme: ThemeDefinition;
   readonly onThemeSelect: (theme: ThemeDefinition) => void;

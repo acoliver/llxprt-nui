@@ -23,7 +23,7 @@ function handleAdapterEvent(
   setResponderWordCount: StateSetter<number>
 ): void {
   if (event.type === "text") {
-    appendLines("responder", event.lines);
+    appendLines("model", event.lines);
     setResponderWordCount((count) => count + event.lines.reduce((sum, line) => sum + countWords(line), 0));
     return;
   }
@@ -50,7 +50,7 @@ export function useStreamingResponder(
     async (prompt: string, session: SessionConfig) => {
       const missing = validateSessionConfig(session);
       if (missing.length > 0) {
-        appendLines("responder", missing);
+        appendLines("model", missing);
         return;
       }
 
@@ -74,7 +74,7 @@ export function useStreamingResponder(
       } catch (error) {
         if (!controller.signal.aborted) {
           const message = error instanceof Error ? error.message : String(error);
-          appendLines("responder", [`Error: ${message}`]);
+          appendLines("model", [`Error: ${message}`]);
         }
       } finally {
         if (mountedRef.current && streamRunId.current === currentRun) {

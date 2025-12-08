@@ -19,22 +19,16 @@ export type ThinkingMessageProps = MessageProps;
 
 export type MessageComponent = (props: MessageProps) => JSX.Element;
 
-export function migrateRole(role: string): MessageRole {
-  if (role === "responder") {
-    return "model";
-  }
-  return role as MessageRole;
-}
-
 export const EmptyBorder = {
-  top: " ",
-  bottom: " ",
-  left: " ",
-  right: " ",
   topLeft: " ",
   topRight: " ",
   bottomLeft: " ",
   bottomRight: " ",
   horizontal: " ",
   vertical: " ",
+  topT: " ",
+  bottomT: " ",
+  leftT: " ",
+  rightT: " ",
+  cross: " ",
 };

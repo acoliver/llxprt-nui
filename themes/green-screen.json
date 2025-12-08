@@ -19,7 +19,7 @@
       "tool": "#00ff00"
     },
     "input": {
-      "bg": "#1d2a1d",
+      "bg": "#000000",
       "fg": "#6a9955",
       "placeholder": "#3b7a3b",
       "border": "#6a9955"

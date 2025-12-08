@@ -3,7 +3,7 @@ export { SystemMessage } from "./SystemMessage";
 export { ModelMessage } from "./ModelMessage";
 export { ThinkingMessage } from "./ThinkingMessage";
 export { renderMessage, getMessageRenderer, roleColor } from "./renderMessage";
-export { migrateRole, EmptyBorder } from "./types";
+export { EmptyBorder } from "./types";
 export type {
   MessageRole,
   MessageProps,

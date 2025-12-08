@@ -9,7 +9,7 @@ interface ProviderCommandProps {
   readonly fetchProviderItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;
   readonly sessionConfig: SessionConfig;
   readonly setSessionConfig: (config: SessionConfig) => void;
-  readonly appendLines: (role: "user" | "responder", lines: string[]) => void;
+  readonly appendLines: (role: "user" | "model", lines: string[]) => void;
   readonly theme: ThemeDefinition;
   readonly focusInput: () => void;
 }
@@ -36,7 +36,7 @@ export function ProviderCommand({
   const handleSelect = useCallback((item: SearchItem): void => {
     const id = item.id.toLowerCase() as ProviderKey;
     setSessionConfig({ ...sessionConfig, provider: id });
-    appendLines("responder", [`Selected provider: ${item.label}`]);
+    appendLines("model", [`Selected provider: ${item.label}`]);
     if (dialogClearRef.current !== null) {
       dialogClearRef.current();
     }
@@ -65,7 +65,7 @@ export function ProviderCommand({
         onExecute: async (dialog) => {
           const result = await fetchProviderItems();
           if (result.messages !== undefined && result.messages.length > 0) {
-            appendLines("responder", result.messages);
+            appendLines("model", result.messages);
           }
           if (result.items.length === 0) {
             return;

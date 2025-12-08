@@ -20,7 +20,7 @@ interface UseAppCommandsProps {
   setSessionConfig: (config: SessionConfig) => void;
   themes: ThemeDefinition[];
   setThemeBySlug: (slug: string) => void;
-  appendLines: (role: "user" | "responder", lines: string[]) => void;
+  appendLines: (role: "user" | "model", lines: string[]) => void;
 }
 
 interface UseAppCommandsResult {
@@ -67,11 +67,11 @@ export function useAppCommands({
     (key: string) => {
       const match = findTheme(themes, key);
       if (!match) {
-        appendLines("responder", [`Theme not found: ${key}`]);
+        appendLines("model", [`Theme not found: ${key}`]);
         return;
       }
       setThemeBySlug(match.slug);
-      appendLines("responder", [`Theme set to ${match.name}`]);
+      appendLines("model", [`Theme set to ${match.name}`]);
     },
     [appendLines, setThemeBySlug, themes]
   );
@@ -82,7 +82,7 @@ export function useAppCommands({
       if (configResult.handled) {
         setSessionConfig(configResult.nextConfig);
         if (configResult.messages.length > 0) {
-          appendLines("responder", configResult.messages);
+          appendLines("model", configResult.messages);
         }
       }
       return configResult;

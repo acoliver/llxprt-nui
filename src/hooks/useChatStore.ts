@@ -1,7 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useState } from "react";
+import type { MessageRole } from "../ui/components/messages";
 
-type Role = "user" | "responder" | "thinking" | "model" | "system";
+type Role = MessageRole;
 type StreamState = "idle" | "streaming";
 
 interface ChatLine {
