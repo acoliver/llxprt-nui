@@ -78,7 +78,7 @@ describe("applyConfigCommand", () => {
     });
 
     const result = await applyConfigCommand("/profile load synthetic", BASE_CONFIG, { profileManager: manager });
-    expect(result.messages[0]).toContain("Loaded synthetic profile");
+    expect(result.messages[0]).toContain("Loaded profile: synthetic");
     expect(result.nextConfig.provider).toBe("openai");
     expect(result.nextConfig.model).toBe("hf:zai-org/GLM-4.6");
     expect(result.nextConfig.baseUrl).toBe("https://api.synthetic.new/openai/v1");

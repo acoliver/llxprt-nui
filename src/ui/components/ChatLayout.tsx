@@ -7,8 +7,9 @@ import type { ThemeDefinition } from "../../features/theme";
 import { HeaderBar } from "./HeaderBar";
 import { StatusBar } from "./StatusBar";
 import { SuggestionPanel } from "./SuggestionPanel";
+import { renderMessage, migrateRole } from "./messages";
 
-type Role = "user" | "responder" | "thinking";
+type Role = "user" | "responder" | "thinking" | "model" | "system";
 type StreamState = "idle" | "streaming";
 
 interface ChatLine {
@@ -80,22 +81,8 @@ interface InputAreaProps {
 }
 
 export function renderChatLine(line: ChatLine, theme: ThemeDefinition): JSX.Element {
-  const color = roleColor(line.role, theme);
-  return (
-    <text key={line.id} fg={color}>
-      [{line.role}] {line.text}
-    </text>
-  );
-}
-
-export function roleColor(role: Role, theme: ThemeDefinition): string {
-  if (role === "user") {
-    return theme.colors.text.user;
-  }
-  if (role === "thinking") {
-    return theme.colors.text.thinking;
-  }
-  return theme.colors.text.responder;
+  const migratedRole = migrateRole(line.role);
+  return renderMessage(migratedRole, line.id, line.text, theme);
 }
 
 export function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element {

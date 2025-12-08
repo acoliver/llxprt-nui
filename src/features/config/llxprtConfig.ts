@@ -178,9 +178,9 @@ function mapProfileToSessionConfig(profile: ProfileData): Partial<SessionConfig>
   return { provider, baseUrl, keyFilePath, model, apiKey: undefined };
 }
 
-function validateProfileConfig(config: Partial<SessionConfig> | null): string | null {
+function validateProfileConfig(config: Partial<SessionConfig> | null, profileName: string): string | null {
   if (config === null) {
-    return "Synthetic profile is incomplete; need provider, base-url, auth-keyfile, and model.";
+    return `Profile "${profileName}" is incomplete; need provider, base-url, auth-keyfile, and model.`;
   }
   return null;
 }
@@ -197,7 +197,7 @@ async function applyProfile(args: string[], current: SessionConfig, options?: Ap
   try {
     const profile = await manager.loadProfile(parsed.name);
     const config = mapProfileToSessionConfig(profile as ProfileData);
-    const error = validateProfileConfig(config);
+    const error = validateProfileConfig(config, parsed.name);
 
     if (error !== null) {
       return { handled: true, nextConfig: current, messages: [error] };
@@ -206,11 +206,11 @@ async function applyProfile(args: string[], current: SessionConfig, options?: Ap
     return {
       handled: true,
       nextConfig: { ...current, ...config },
-      messages: ["Loaded synthetic profile"]
+      messages: [`Loaded profile: ${parsed.name}`]
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { handled: true, nextConfig: current, messages: [`Failed to load synthetic profile: ${message}`] };
+    return { handled: true, nextConfig: current, messages: [`Failed to load profile "${parsed.name}": ${message}`] };
   }
 }
 

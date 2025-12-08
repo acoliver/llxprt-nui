@@ -51,6 +51,12 @@ export interface ThemeColors {
     readonly thumb: string;
     readonly track: string;
   };
+  readonly message: {
+    readonly userBorder: string;
+    readonly systemBorder: string;
+    readonly systemText: string;
+    readonly groupSpacing?: number;
+  };
 }
 
 export interface ThemeDefinition {

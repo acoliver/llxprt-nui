@@ -48,6 +48,11 @@
     "scrollbar": {
       "thumb": "#89B4FA",
       "track": "#6C7086"
+    },
+    "message": {
+      "userBorder": "#ADD8E6",
+      "systemBorder": "#F9E2AF",
+      "systemText": "#F9E2AF"
     }
   }
 }

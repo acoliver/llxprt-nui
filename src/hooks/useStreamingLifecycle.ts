@@ -12,10 +12,10 @@ interface UseStreamingLifecycleResult {
 }
 
 export function useStreamingLifecycle(
-  appendLines: (role: "user" | "responder", lines: string[]) => void,
-  appendToolBlock: (toolName: string, args: unknown) => void,
+  appendLines: (role: "user" | "responder" | "thinking", lines: string[]) => void,
+  appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
   setResponderWordCount: (count: number) => void,
-  setStreamState: (state: "idle" | "streaming" | "done") => void
+  setStreamState: (state: "idle" | "streaming") => void
 ): UseStreamingLifecycleResult {
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
