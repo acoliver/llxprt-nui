@@ -7,7 +7,7 @@ interface ThemeCommandProps {
   readonly themes: ThemeDefinition[];
   readonly currentTheme: ThemeDefinition;
   readonly onThemeSelect: (theme: ThemeDefinition) => void;
-  readonly appendLines: (role: "user" | "model", lines: string[]) => void;
+  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
   readonly focusInput: () => void;
 }
 
@@ -30,7 +30,7 @@ export function ThemeCommand({
 
   const handleSelect = useCallback((theme: ThemeDefinition): void => {
     onThemeSelect(theme);
-    appendLines("model", [`Theme set to ${theme.name}`]);
+    appendLines("system", [`Theme set to ${theme.name}`]);
   }, [onThemeSelect, appendLines]);
 
   const modal = useMemo(() => (

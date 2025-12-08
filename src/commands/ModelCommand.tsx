@@ -9,7 +9,7 @@ interface ModelCommandProps {
   readonly fetchModelItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;
   readonly sessionConfig: SessionConfig;
   readonly setSessionConfig: (config: SessionConfig) => void;
-  readonly appendLines: (role: "user" | "model", lines: string[]) => void;
+  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
   readonly theme: ThemeDefinition;
   readonly focusInput: () => void;
 }
@@ -35,7 +35,7 @@ export function ModelCommand({
 
   const handleSelect = useCallback((item: SearchItem): void => {
     setSessionConfig({ ...sessionConfig, model: item.id });
-    appendLines("model", [`Selected model: ${item.label}`]);
+    appendLines("system", [`Selected model: ${item.label}`]);
     if (dialogClearRef.current !== null) {
       dialogClearRef.current();
     }
@@ -64,7 +64,7 @@ export function ModelCommand({
         onExecute: async (dialog) => {
           const result = await fetchModelItems();
           if (result.messages !== undefined && result.messages.length > 0) {
-            appendLines("model", result.messages);
+            appendLines("system", result.messages);
           }
           if (result.items.length === 0) {
             return;

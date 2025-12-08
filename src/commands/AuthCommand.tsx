@@ -4,7 +4,7 @@ import { AuthModal, AUTH_DEFAULTS, type AuthOption } from "../ui/modals";
 import type { ThemeDefinition } from "../features/theme";
 
 interface AuthCommandProps {
-  readonly appendLines: (role: "user" | "model", lines: string[]) => void;
+  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
   readonly theme: ThemeDefinition;
   readonly focusInput: () => void;
 }
@@ -19,7 +19,7 @@ export function AuthCommand({ appendLines, theme, focusInput }: AuthCommandProps
     const enabled = next
       .filter((opt) => opt.id !== "close" && opt.enabled)
       .map((opt) => opt.label.replace(/^\d+\.\s*/, ""));
-    appendLines("model", [`Auth providers: ${enabled.join(", ") || "none"}`]);
+    appendLines("system", [`Auth providers: ${enabled.join(", ") || "none"}`]);
   }, [appendLines]);
 
   const handleClose = useCallback((): void => {
