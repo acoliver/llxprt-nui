@@ -9,7 +9,7 @@ interface ModelCommandProps {
   readonly fetchModelItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;
   readonly sessionConfig: SessionConfig;
   readonly setSessionConfig: (config: SessionConfig) => void;
-  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
+  readonly appendMessage: (role: "user" | "model" | "system", text: string) => string;
   readonly theme: ThemeDefinition;
   readonly focusInput: () => void;
 }
@@ -18,7 +18,7 @@ export function ModelCommand({
   fetchModelItems,
   sessionConfig,
   setSessionConfig,
-  appendLines,
+  appendMessage,
   theme,
   focusInput
 }: ModelCommandProps): JSX.Element | null {
@@ -35,12 +35,12 @@ export function ModelCommand({
 
   const handleSelect = useCallback((item: SearchItem): void => {
     setSessionConfig({ ...sessionConfig, model: item.id });
-    appendLines("system", [`Selected model: ${item.label}`]);
+    appendMessage("system", `Selected model: ${item.label}`);
     if (dialogClearRef.current !== null) {
       dialogClearRef.current();
     }
     focusInput();
-  }, [sessionConfig, setSessionConfig, appendLines, focusInput]);
+  }, [sessionConfig, setSessionConfig, appendMessage, focusInput]);
 
   const modal = useMemo(() => (
     <SearchSelectModal
@@ -64,7 +64,7 @@ export function ModelCommand({
         onExecute: async (dialog) => {
           const result = await fetchModelItems();
           if (result.messages !== undefined && result.messages.length > 0) {
-            appendLines("system", result.messages);
+            appendMessage("system", result.messages.join("\n"));
           }
           if (result.items.length === 0) {
             return;
@@ -78,7 +78,7 @@ export function ModelCommand({
     ]);
 
     return cleanup;
-  }, [register, fetchModelItems, appendLines, modal]);
+  }, [register, fetchModelItems, appendMessage, modal]);
 
   return null;
 }

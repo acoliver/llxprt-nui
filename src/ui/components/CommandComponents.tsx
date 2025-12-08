@@ -12,7 +12,7 @@ interface CommandComponentsProps {
   readonly fetchProviderItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;
   readonly sessionConfig: SessionConfig;
   readonly setSessionConfig: (config: SessionConfig) => void;
-  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
+  readonly appendMessage: (role: "user" | "model" | "system", text: string) => string;
   readonly themes: ThemeDefinition[];
   readonly currentTheme: ThemeDefinition;
   readonly onThemeSelect: (theme: ThemeDefinition) => void;
@@ -24,7 +24,7 @@ export function CommandComponents({
   fetchProviderItems,
   sessionConfig,
   setSessionConfig,
-  appendLines,
+  appendMessage,
   themes,
   currentTheme,
   onThemeSelect,
@@ -36,7 +36,7 @@ export function CommandComponents({
         fetchModelItems={fetchModelItems}
         sessionConfig={sessionConfig}
         setSessionConfig={setSessionConfig}
-        appendLines={appendLines}
+        appendMessage={appendMessage}
         theme={currentTheme}
         focusInput={focusInput}
       />
@@ -44,7 +44,7 @@ export function CommandComponents({
         fetchProviderItems={fetchProviderItems}
         sessionConfig={sessionConfig}
         setSessionConfig={setSessionConfig}
-        appendLines={appendLines}
+        appendMessage={appendMessage}
         theme={currentTheme}
         focusInput={focusInput}
       />
@@ -52,11 +52,11 @@ export function CommandComponents({
         themes={themes}
         currentTheme={currentTheme}
         onThemeSelect={onThemeSelect}
-        appendLines={appendLines}
+        appendMessage={appendMessage}
         focusInput={focusInput}
       />
       <AuthCommand
-        appendLines={appendLines}
+        appendMessage={appendMessage}
         theme={currentTheme}
         focusInput={focusInput}
       />

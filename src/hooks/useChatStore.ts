@@ -5,9 +5,9 @@ import type { MessageRole } from "../ui/components/messages";
 type Role = MessageRole;
 type StreamState = "idle" | "streaming";
 
-interface ChatLine {
+interface ChatMessage {
   id: string;
-  kind: "line";
+  kind: "message";
   role: Role;
   text: string;
 }
@@ -22,13 +22,16 @@ interface ToolBlock {
   streaming?: boolean;
 }
 
+type ChatEntry = ChatMessage | ToolBlock;
+
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
-export type { Role, StreamState, ChatLine, ToolBlock, StateSetter };
+export type { Role, StreamState, ChatMessage, ToolBlock, ChatEntry, StateSetter };
 
 export interface UseChatStoreReturn {
-  lines: (ChatLine | ToolBlock)[];
-  appendLines: (role: Role, textLines: string[]) => void;
+  entries: ChatEntry[];
+  appendMessage: (role: Role, text: string) => string;
+  appendToMessage: (id: string, text: string) => void;
   appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string;
   promptCount: number;
   setPromptCount: StateSetter<number>;
@@ -39,31 +42,47 @@ export interface UseChatStoreReturn {
   updateToolBlock: (id: string, mutate: (block: ToolBlock) => ToolBlock) => void;
 }
 
-export function useChatStore(makeLineId: () => string): UseChatStoreReturn {
-  const [lines, setLines] = useState<(ChatLine | ToolBlock)[]>([]);
+export function useChatStore(makeId: () => string): UseChatStoreReturn {
+  const [entries, setEntries] = useState<ChatEntry[]>([]);
   const [promptCount, setPromptCount] = useState(0);
   const [responderWordCount, setResponderWordCount] = useState(0);
   const [streamState, setStreamState] = useState<StreamState>("idle");
 
-  const appendLines = useCallback(
-    (role: Role, textLines: string[]) => {
-      setLines((prev) => [
+  const appendMessage = useCallback(
+    (role: Role, text: string): string => {
+      const id = makeId();
+      setEntries((prev) => [
         ...prev,
-        ...textLines.map((text) => ({
-          id: makeLineId(),
-          kind: "line" as const,
+        {
+          id,
+          kind: "message",
           role,
           text
-        }))
+        }
       ]);
+      return id;
     },
-    [makeLineId]
+    [makeId]
+  );
+
+  const appendToMessage = useCallback(
+    (id: string, text: string): void => {
+      setEntries((prev) =>
+        prev.map((entry) => {
+          if (entry.kind !== "message" || entry.id !== id) {
+            return entry;
+          }
+          return { ...entry, text: entry.text + text };
+        })
+      );
+    },
+    []
   );
 
   const appendToolBlock = useCallback(
     (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => {
-      const id = makeLineId();
-      setLines((prev) => [
+      const id = makeId();
+      setEntries((prev) => [
         ...prev,
         {
           id,
@@ -77,12 +96,12 @@ export function useChatStore(makeLineId: () => string): UseChatStoreReturn {
       ]);
       return id;
     },
-    [makeLineId]
+    [makeId]
   );
 
   const updateToolBlock = useCallback(
     (id: string, mutate: (block: ToolBlock) => ToolBlock) => {
-      setLines((prev) =>
+      setEntries((prev) =>
         prev.map((item) => {
           if (item.kind !== "tool" || item.id !== id) {
             return item;
@@ -95,8 +114,9 @@ export function useChatStore(makeLineId: () => string): UseChatStoreReturn {
   );
 
   return {
-    lines,
-    appendLines,
+    entries,
+    appendMessage,
+    appendToMessage,
     appendToolBlock,
     promptCount,
     setPromptCount,

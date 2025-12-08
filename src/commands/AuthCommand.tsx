@@ -4,12 +4,12 @@ import { AuthModal, AUTH_DEFAULTS, type AuthOption } from "../ui/modals";
 import type { ThemeDefinition } from "../features/theme";
 
 interface AuthCommandProps {
-  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
+  readonly appendMessage: (role: "user" | "model" | "system", text: string) => string;
   readonly theme: ThemeDefinition;
   readonly focusInput: () => void;
 }
 
-export function AuthCommand({ appendLines, theme, focusInput }: AuthCommandProps): JSX.Element | null {
+export function AuthCommand({ appendMessage, theme, focusInput }: AuthCommandProps): JSX.Element | null {
   const { register } = useCommand();
   const [authOptions, setAuthOptions] = useState<AuthOption[]>(AUTH_DEFAULTS);
   const dialogClearRef = useRef<(() => void) | null>(null);
@@ -19,8 +19,8 @@ export function AuthCommand({ appendLines, theme, focusInput }: AuthCommandProps
     const enabled = next
       .filter((opt) => opt.id !== "close" && opt.enabled)
       .map((opt) => opt.label.replace(/^\d+\.\s*/, ""));
-    appendLines("system", [`Auth providers: ${enabled.join(", ") || "none"}`]);
-  }, [appendLines]);
+    appendMessage("system", `Auth providers: ${enabled.join(", ") || "none"}`);
+  }, [appendMessage]);
 
   const handleClose = useCallback((): void => {
     if (dialogClearRef.current !== null) {

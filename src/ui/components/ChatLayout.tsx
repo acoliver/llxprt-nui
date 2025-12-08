@@ -12,9 +12,9 @@ import { renderMessage, type MessageRole } from "./messages";
 type Role = MessageRole;
 type StreamState = "idle" | "streaming";
 
-interface ChatLine {
+interface ChatMessage {
   id: string;
-  kind: "line";
+  kind: "message";
   role: Role;
   text: string;
 }
@@ -28,6 +28,8 @@ interface ToolBlock {
   maxHeight?: number;
   streaming?: boolean;
 }
+
+type ChatEntry = ChatMessage | ToolBlock;
 
 const MIN_INPUT_LINES = 1;
 const MAX_INPUT_LINES = 10;
@@ -45,7 +47,7 @@ const TEXTAREA_KEY_BINDINGS = [
 
 export interface ChatLayoutProps {
   readonly headerText: string;
-  readonly lines: (ChatLine | ToolBlock)[];
+  readonly entries: ChatEntry[];
   readonly scrollRef: RefObject<ScrollBoxRenderable | null>;
   readonly autoFollow: boolean;
   readonly textareaRef: RefObject<TextareaRenderable | null>;
@@ -64,7 +66,7 @@ export interface ChatLayoutProps {
 }
 
 interface ScrollbackProps {
-  readonly lines: (ChatLine | ToolBlock)[];
+  readonly entries: ChatEntry[];
   readonly scrollRef: RefObject<ScrollBoxRenderable | null>;
   readonly autoFollow: boolean;
   readonly onScroll: (event: { type: string }) => void;
@@ -80,12 +82,8 @@ interface InputAreaProps {
   readonly theme: ThemeDefinition;
 }
 
-export function renderChatLine(line: ChatLine, theme: ThemeDefinition, isLastInGroup: boolean): JSX.Element {
-  const message = renderMessage(line.role, line.id, line.text, theme);
-  if (isLastInGroup && line.role === "model") {
-    return <box key={`${line.id}-wrap`} style={{ marginBottom: 1 }}>{message}</box>;
-  }
-  return message;
+export function renderChatMessage(message: ChatMessage, theme: ThemeDefinition): JSX.Element {
+  return renderMessage(message.role, message.id, message.text, theme);
 }
 
 export function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element {
@@ -147,21 +145,6 @@ export function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.E
   );
 }
 
-function isLastInGroup(lines: (ChatLine | ToolBlock)[], index: number): boolean {
-  const current = lines[index];
-  if (current.kind !== "line") {
-    return false;
-  }
-  const next = lines[index + 1];
-  if (next === undefined) {
-    return true;
-  }
-  if (next.kind !== "line") {
-    return true;
-  }
-  return next.role !== current.role;
-}
-
 function ScrollbackView(props: ScrollbackProps): JSX.Element {
   return (
     <scrollbox
@@ -186,9 +169,9 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
       focused
       >
         <box flexDirection="column" style={{ gap: 0, width: "100%" }}>
-          {props.lines.map((entry, index) =>
-            entry.kind === "line"
-              ? renderChatLine(entry, props.theme, isLastInGroup(props.lines, index))
+          {props.entries.map((entry) =>
+            entry.kind === "message"
+              ? renderChatMessage(entry, props.theme)
               : renderToolBlock(entry, props.theme)
           )}
         </box>
@@ -268,7 +251,7 @@ export function ChatLayout(props: ChatLayoutProps): JSX.Element {
     >
       <HeaderBar text={props.headerText} theme={props.theme} />
       <ScrollbackView
-        lines={props.lines}
+        entries={props.entries}
         scrollRef={props.scrollRef}
         autoFollow={props.autoFollow}
         onScroll={props.onScroll}

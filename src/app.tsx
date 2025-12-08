@@ -39,21 +39,21 @@ function AppInner(): JSX.Element {
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } = useCompletionManager(textareaRef);
   const { record: recordHistory, handleHistoryKey } = usePromptHistory(textareaRef);
   const makeLineId = useLineIdGenerator();
-  const { lines, appendLines, appendToolBlock, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } = useChatStore(makeLineId);
-  const { mountedRef, cancelStreaming, startStreamingResponder } = useStreamingLifecycle(appendLines, appendToolBlock, setResponderWordCount, setStreamState);
+  const { entries, appendMessage, appendToMessage, appendToolBlock, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } = useChatStore(makeLineId);
+  const { mountedRef, cancelStreaming, startStreamingResponder } = useStreamingLifecycle(appendMessage, appendToMessage, appendToolBlock, setResponderWordCount, setStreamState);
 
   useFocusAndMount(textareaRef, mountedRef);
 
   const focusInput = useCallback(() => { textareaRef.current?.focus(); }, []);
   const handleThemeSelect = useCallback((theme: ThemeDefinition) => { setThemeBySlug(theme.slug); }, [setThemeBySlug]);
 
-  const { fetchModelItems, fetchProviderItems, applyTheme, handleConfigCommand } = useAppCommands({ sessionConfig, setSessionConfig, themes, setThemeBySlug, appendLines });
+  const { fetchModelItems, fetchProviderItems, applyTheme, handleConfigCommand } = useAppCommands({ sessionConfig, setSessionConfig, themes, setThemeBySlug, appendMessage });
 
   useSuggestionSetup(themes);
 
   const { autoFollow, setAutoFollow, handleContentChange, handleMouseScroll } = useScrollManagement(scrollRef);
 
-  useEffect(() => { handleContentChange(); }, [handleContentChange, lines.length]);
+  useEffect(() => { handleContentChange(); }, [handleContentChange, entries.length]);
 
   const handleCommand = useCallback(async (command: string) => {
     const configResult = await handleConfigCommand(command);
@@ -67,7 +67,7 @@ function AppInner(): JSX.Element {
     return triggerCommand(command);
   }, [applyTheme, handleConfigCommand, triggerCommand]);
 
-  const { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete } = useInputManager(textareaRef, appendLines, setPromptCount, setAutoFollow, (prompt) => startStreamingResponder(prompt, sessionConfig), refreshCompletion, clearCompletion, applySelection, handleCommand, recordHistory);
+  const { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete } = useInputManager(textareaRef, appendMessage, setPromptCount, setAutoFollow, (prompt) => startStreamingResponder(prompt, sessionConfig), refreshCompletion, clearCompletion, applySelection, handleCommand, recordHistory);
 
   const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
   const handleMouseUp = useSelectionClipboard(renderer);
@@ -84,13 +84,13 @@ function AppInner(): JSX.Element {
         fetchProviderItems={fetchProviderItems}
         sessionConfig={sessionConfig}
         setSessionConfig={setSessionConfig}
-        appendLines={appendLines}
+        appendMessage={appendMessage}
         themes={themes}
         currentTheme={theme}
         onThemeSelect={handleThemeSelect}
         focusInput={focusInput}
       />
-      <ChatLayout headerText={HEADER_TEXT} lines={lines} scrollRef={scrollRef} autoFollow={autoFollow}
+      <ChatLayout headerText={HEADER_TEXT} entries={entries} scrollRef={scrollRef} autoFollow={autoFollow}
         textareaRef={textareaRef} inputLineCount={inputLineCount} enforceInputLineBounds={enforceInputLineBounds}
         handleSubmit={handleSubmitWrapped} statusLabel={statusLabel} promptCount={promptCount}
         responderWordCount={responderWordCount} streamState={streamState} onScroll={handleMouseScroll}

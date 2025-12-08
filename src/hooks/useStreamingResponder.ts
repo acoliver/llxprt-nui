@@ -11,6 +11,11 @@ interface RefHandle<T> {
   current: T;
 }
 
+interface StreamContext {
+  modelMessageId: string | null;
+  thinkingMessageId: string | null;
+}
+
 function countWords(text: string): number {
   const matches = text.trim().match(/\S+/g);
   return matches ? matches.length : 0;
@@ -18,27 +23,47 @@ function countWords(text: string): number {
 
 function handleAdapterEvent(
   event: AdapterEvent,
-  appendLines: (role: Role, textLines: string[]) => void,
+  context: StreamContext,
+  appendMessage: (role: Role, text: string) => string,
+  appendToMessage: (id: string, text: string) => void,
   appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
   setResponderWordCount: StateSetter<number>
-): void {
+): StreamContext {
   if (event.type === "text") {
-    appendLines("model", event.lines);
-    setResponderWordCount((count) => count + event.lines.reduce((sum, line) => sum + countWords(line), 0));
-    return;
+    const text = event.lines.join("\n");
+    if (context.modelMessageId === null) {
+      const id = appendMessage("model", text);
+      setResponderWordCount((count) => count + countWords(text));
+      return { ...context, modelMessageId: id };
+    } else {
+      const appendText = "\n" + text;
+      appendToMessage(context.modelMessageId, appendText);
+      setResponderWordCount((count) => count + countWords(text));
+      return context;
+    }
   }
   if (event.type === "thinking") {
-    appendLines("thinking", event.lines);
-    setResponderWordCount((count) => count + event.lines.reduce((sum, line) => sum + countWords(line), 0));
-    return;
+    const text = event.lines.join("\n");
+    if (context.thinkingMessageId === null) {
+      const id = appendMessage("thinking", text);
+      setResponderWordCount((count) => count + countWords(text));
+      return { ...context, thinkingMessageId: id };
+    } else {
+      const appendText = "\n" + text;
+      appendToMessage(context.thinkingMessageId, appendText);
+      setResponderWordCount((count) => count + countWords(text));
+      return context;
+    }
   }
   appendToolBlock({ lines: [event.header, ...event.lines], isBatch: false, scrollable: false });
+  return { modelMessageId: null, thinkingMessageId: null };
 }
 
 export type UseStreamingResponderFunction = (prompt: string, session: SessionConfig) => Promise<void>;
 
 export function useStreamingResponder(
-  appendLines: (role: Role, textLines: string[]) => void,
+  appendMessage: (role: Role, text: string) => string,
+  appendToMessage: (id: string, text: string) => void,
   appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
   setResponderWordCount: StateSetter<number>,
   setStreamState: StateSetter<StreamState>,
@@ -50,7 +75,7 @@ export function useStreamingResponder(
     async (prompt: string, session: SessionConfig) => {
       const missing = validateSessionConfig(session);
       if (missing.length > 0) {
-        appendLines("model", missing);
+        appendMessage("system", missing.join("\n"));
         return;
       }
 
@@ -64,17 +89,19 @@ export function useStreamingResponder(
       abortRef.current = controller;
       setStreamState("streaming");
 
+      let context: StreamContext = { modelMessageId: null, thinkingMessageId: null };
+
       try {
         for await (const event of sendMessage(session, prompt, controller.signal)) {
           if (!mountedRef.current || streamRunId.current !== currentRun) {
             break;
           }
-          handleAdapterEvent(event, appendLines, appendToolBlock, setResponderWordCount);
+          context = handleAdapterEvent(event, context, appendMessage, appendToMessage, appendToolBlock, setResponderWordCount);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
           const message = error instanceof Error ? error.message : String(error);
-          appendLines("model", [`Error: ${message}`]);
+          appendMessage("system", `Error: ${message}`);
         }
       } finally {
         if (mountedRef.current && streamRunId.current === currentRun) {
@@ -85,6 +112,6 @@ export function useStreamingResponder(
         }
       }
     },
-    [appendLines, appendToolBlock, abortRef, mountedRef, setResponderWordCount, setStreamState, streamRunId]
+    [appendMessage, appendToMessage, appendToolBlock, abortRef, mountedRef, setResponderWordCount, setStreamState, streamRunId]
   );
 }

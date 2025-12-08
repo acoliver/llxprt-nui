@@ -2,54 +2,88 @@ import { describe, expect, it } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useChatStore } from "./useChatStore";
 
-describe("useChatStore role migration", () => {
+describe("useChatStore message handling", () => {
   let idCounter = 0;
-  const makeLineId = () => `test-${idCounter++}`;
+  const makeId = () => `test-${idCounter++}`;
 
-  it("should accept system role in appendLines", () => {
-    const { result } = renderHook(() => useChatStore(makeLineId));
+  it("should append a system message", () => {
+    const { result } = renderHook(() => useChatStore(makeId));
 
     act(() => {
-      result.current.appendLines("system", ["System notification"]);
+      result.current.appendMessage("system", "System notification");
     });
 
-    expect(result.current.lines).toHaveLength(1);
-    expect(result.current.lines[0]).toMatchObject({
-      kind: "line",
+    expect(result.current.entries).toHaveLength(1);
+    expect(result.current.entries[0]).toMatchObject({
+      kind: "message",
       role: "system",
       text: "System notification",
     });
   });
 
-  it("should accept model role in appendLines", () => {
-    const { result } = renderHook(() => useChatStore(makeLineId));
+  it("should append a model message", () => {
+    const { result } = renderHook(() => useChatStore(makeId));
 
     act(() => {
-      result.current.appendLines("model", ["Model response"]);
+      result.current.appendMessage("model", "Model response");
     });
 
-    expect(result.current.lines).toHaveLength(1);
-    expect(result.current.lines[0]).toMatchObject({
-      kind: "line",
+    expect(result.current.entries).toHaveLength(1);
+    expect(result.current.entries[0]).toMatchObject({
+      kind: "message",
       role: "model",
       text: "Model response",
     });
   });
 
-  it("should store lines with correct role", () => {
-    const { result } = renderHook(() => useChatStore(makeLineId));
+  it("should store messages with correct role", () => {
+    const { result } = renderHook(() => useChatStore(makeId));
 
     act(() => {
-      result.current.appendLines("user", ["User input"]);
-      result.current.appendLines("model", ["Model response"]);
-      result.current.appendLines("thinking", ["Model thinking"]);
-      result.current.appendLines("system", ["System message"]);
+      result.current.appendMessage("user", "User input");
+      result.current.appendMessage("model", "Model response");
+      result.current.appendMessage("thinking", "Model thinking");
+      result.current.appendMessage("system", "System message");
     });
 
-    expect(result.current.lines).toHaveLength(4);
-    expect(result.current.lines[0].role).toBe("user");
-    expect(result.current.lines[1].role).toBe("model");
-    expect(result.current.lines[2].role).toBe("thinking");
-    expect(result.current.lines[3].role).toBe("system");
+    expect(result.current.entries).toHaveLength(4);
+    const messages = result.current.entries.filter(e => e.kind === "message");
+    expect(messages[0].role).toBe("user");
+    expect(messages[1].role).toBe("model");
+    expect(messages[2].role).toBe("thinking");
+    expect(messages[3].role).toBe("system");
+  });
+
+  it("should append text to an existing message", () => {
+    const { result } = renderHook(() => useChatStore(makeId));
+
+    let messageId: string;
+    act(() => {
+      messageId = result.current.appendMessage("model", "First line");
+    });
+
+    act(() => {
+      result.current.appendToMessage(messageId!, "\nSecond line");
+    });
+
+    expect(result.current.entries).toHaveLength(1);
+    const message = result.current.entries[0];
+    expect(message.kind).toBe("message");
+    if (message.kind === "message") {
+      expect(message.text).toBe("First line\nSecond line");
+    }
+  });
+
+  it("should return the message id from appendMessage", () => {
+    const { result } = renderHook(() => useChatStore(makeId));
+
+    let messageId: string;
+    act(() => {
+      messageId = result.current.appendMessage("user", "Test message");
+    });
+
+    expect(messageId!).toBeDefined();
+    expect(typeof messageId!).toBe("string");
+    expect(result.current.entries[0].id).toBe(messageId!);
   });
 });

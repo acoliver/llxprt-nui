@@ -20,7 +20,7 @@ interface UseAppCommandsProps {
   setSessionConfig: (config: SessionConfig) => void;
   themes: ThemeDefinition[];
   setThemeBySlug: (slug: string) => void;
-  appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
+  appendMessage: (role: "user" | "model" | "system", text: string) => string;
 }
 
 interface UseAppCommandsResult {
@@ -35,7 +35,7 @@ export function useAppCommands({
   setSessionConfig,
   themes,
   setThemeBySlug,
-  appendLines,
+  appendMessage,
 }: UseAppCommandsProps): UseAppCommandsResult {
   const fetchModelItems = useCallback(async (): Promise<ItemFetchResult> => {
     const missing = validateSessionConfig(sessionConfig, { requireModel: false });
@@ -67,13 +67,13 @@ export function useAppCommands({
     (key: string) => {
       const match = findTheme(themes, key);
       if (!match) {
-        appendLines("system", [`Theme not found: ${key}`]);
+        appendMessage("system", `Theme not found: ${key}`);
         return;
       }
       setThemeBySlug(match.slug);
-      appendLines("system", [`Theme set to ${match.name}`]);
+      appendMessage("system", `Theme set to ${match.name}`);
     },
-    [appendLines, setThemeBySlug, themes]
+    [appendMessage, setThemeBySlug, themes]
   );
 
   const handleConfigCommand = useCallback(
@@ -82,12 +82,12 @@ export function useAppCommands({
       if (configResult.handled) {
         setSessionConfig(configResult.nextConfig);
         if (configResult.messages.length > 0) {
-          appendLines("system", configResult.messages);
+          appendMessage("system", configResult.messages.join("\n"));
         }
       }
       return configResult;
     },
-    [appendLines, sessionConfig, setSessionConfig]
+    [appendMessage, sessionConfig, setSessionConfig]
   );
 
   return { fetchModelItems, fetchProviderItems, applyTheme, handleConfigCommand };

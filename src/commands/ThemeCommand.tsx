@@ -7,7 +7,7 @@ interface ThemeCommandProps {
   readonly themes: ThemeDefinition[];
   readonly currentTheme: ThemeDefinition;
   readonly onThemeSelect: (theme: ThemeDefinition) => void;
-  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
+  readonly appendMessage: (role: "user" | "model" | "system", text: string) => string;
   readonly focusInput: () => void;
 }
 
@@ -15,7 +15,7 @@ export function ThemeCommand({
   themes,
   currentTheme,
   onThemeSelect,
-  appendLines,
+  appendMessage,
   focusInput
 }: ThemeCommandProps): JSX.Element | null {
   const { register } = useCommand();
@@ -30,8 +30,8 @@ export function ThemeCommand({
 
   const handleSelect = useCallback((theme: ThemeDefinition): void => {
     onThemeSelect(theme);
-    appendLines("system", [`Theme set to ${theme.name}`]);
-  }, [onThemeSelect, appendLines]);
+    appendMessage("system", `Theme set to ${theme.name}`);
+  }, [onThemeSelect, appendMessage]);
 
   const modal = useMemo(() => (
     <ThemeModal

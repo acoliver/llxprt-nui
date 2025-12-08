@@ -21,7 +21,7 @@ export interface UseInputManagerReturn {
 
 export function useInputManager(
   textareaRef: RefObject<TextareaRenderable | null>,
-  appendLines: (role: Role, textLines: string[]) => void,
+  appendMessage: (role: Role, text: string) => string,
   setPromptCount: StateSetter<number>,
   setAutoFollow: StateSetter<boolean>,
   startStreamingResponder: (prompt: string) => Promise<void>,
@@ -66,7 +66,7 @@ export function useInputManager(
       process.exit(0);
     }
     recordHistory(raw);
-    appendLines("user", [raw]);
+    appendMessage("user", raw);
     setPromptCount((count) => count + 1);
     editor.clear();
     setInputLineCount(MIN_INPUT_LINES);
@@ -74,7 +74,7 @@ export function useInputManager(
     clearCompletion();
     editor.submit();
     await startStreamingResponder(trimmed);
-  }, [appendLines, clearCompletion, handleCommand, recordHistory, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
+  }, [appendMessage, clearCompletion, handleCommand, recordHistory, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
   const handleTabComplete = useCallback(
     () => {

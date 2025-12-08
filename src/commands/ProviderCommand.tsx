@@ -9,7 +9,7 @@ interface ProviderCommandProps {
   readonly fetchProviderItems: () => Promise<{ items: SearchItem[]; messages?: string[] }>;
   readonly sessionConfig: SessionConfig;
   readonly setSessionConfig: (config: SessionConfig) => void;
-  readonly appendLines: (role: "user" | "model" | "system", lines: string[]) => void;
+  readonly appendMessage: (role: "user" | "model" | "system", text: string) => string;
   readonly theme: ThemeDefinition;
   readonly focusInput: () => void;
 }
@@ -18,7 +18,7 @@ export function ProviderCommand({
   fetchProviderItems,
   sessionConfig,
   setSessionConfig,
-  appendLines,
+  appendMessage,
   theme,
   focusInput
 }: ProviderCommandProps): JSX.Element | null {
@@ -36,12 +36,12 @@ export function ProviderCommand({
   const handleSelect = useCallback((item: SearchItem): void => {
     const id = item.id.toLowerCase() as ProviderKey;
     setSessionConfig({ ...sessionConfig, provider: id });
-    appendLines("system", [`Selected provider: ${item.label}`]);
+    appendMessage("system", `Selected provider: ${item.label}`);
     if (dialogClearRef.current !== null) {
       dialogClearRef.current();
     }
     focusInput();
-  }, [sessionConfig, setSessionConfig, appendLines, focusInput]);
+  }, [sessionConfig, setSessionConfig, appendMessage, focusInput]);
 
   const modal = useMemo(() => (
     <SearchSelectModal
@@ -65,7 +65,7 @@ export function ProviderCommand({
         onExecute: async (dialog) => {
           const result = await fetchProviderItems();
           if (result.messages !== undefined && result.messages.length > 0) {
-            appendLines("system", result.messages);
+            appendMessage("system", result.messages.join("\n"));
           }
           if (result.items.length === 0) {
             return;
@@ -79,7 +79,7 @@ export function ProviderCommand({
     ]);
 
     return cleanup;
-  }, [register, fetchProviderItems, appendLines, modal]);
+  }, [register, fetchProviderItems, appendMessage, modal]);
 
   return null;
 }
