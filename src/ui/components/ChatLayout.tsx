@@ -32,12 +32,12 @@ interface ToolBlock {
 const MIN_INPUT_LINES = 1;
 const MAX_INPUT_LINES = 10;
 const TEXTAREA_KEY_BINDINGS = [
-  { name: "return", action: "submit" },
   { name: "return", shift: true, action: "newline" },
   { name: "return", ctrl: true, action: "newline" },
   { name: "return", meta: true, action: "newline" },
   { name: "return", alt: true, action: "newline" },
   { name: "return", super: true, action: "newline" },
+  { name: "return", action: "submit" },
   { name: "kpenter", action: "submit" },
   { name: "kpplus", action: "submit" },
   { name: "linefeed", action: "newline" }
