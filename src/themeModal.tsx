@@ -1,8 +1,11 @@
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { TextareaRenderable } from "@opentui/core";
+import { useListNavigation } from "./hooks/useListNavigation";
 import { ModalShell } from "./modalShell";
 import type { ThemeDefinition } from "./theme";
+import { FilterInput } from "./components/FilterInput";
+import { SelectableListItem } from "./components/SelectableList";
 
 export interface ThemeModalProps {
   readonly themes: ThemeDefinition[];
@@ -14,28 +17,29 @@ export interface ThemeModalProps {
 export function ThemeModal(props: ThemeModalProps): JSX.Element {
   const searchRef = useRef<TextareaRenderable | null>(null);
   const [query, setQuery] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const filtered = useMemo(() => filterThemes(props.themes, query), [props.themes, query]);
+  const filtered = useMemo(() => {
+    if (!query.trim()) {
+      return props.themes;
+    }
+    const normalized = query.trim().toLowerCase();
+    return props.themes.filter((theme) =>
+      theme.name.toLowerCase().includes(normalized) ||
+      theme.slug.toLowerCase().includes(normalized) ||
+      theme.kind.toLowerCase().includes(normalized)
+    );
+  }, [props.themes, query]);
+
+  const { selectedIndex, setSelectedIndex, moveSelection } = useListNavigation(filtered.length);
   const selected = filtered[selectedIndex] ?? filtered[0] ?? props.current;
 
-  const handleSubmit = useCallback(() => undefined, []);
-
-  const handleContentChange = useCallback(() => {
-    setQuery(searchRef.current?.plainText ?? "");
-  }, []);
-
-  const handleCursorChange = useCallback(() => {
-    setQuery(searchRef.current?.plainText ?? "");
-  }, []);
-
-  useEffect(() => {
-    searchRef.current?.focus();
+  const handleQueryChange = useCallback((newQuery: string) => {
+    setQuery(newQuery);
   }, []);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query]);
+  }, [query, setSelectedIndex]);
 
   useKeyboard((key) => {
     if (key.eventType !== "press") {
@@ -50,10 +54,10 @@ export function ThemeModal(props: ThemeModalProps): JSX.Element {
     }
     if (key.name === "down") {
       key.preventDefault();
-      setSelectedIndex((index) => clampIndex(index + 1, filtered.length));
+      moveSelection(1);
     } else if (key.name === "up") {
       key.preventDefault();
-      setSelectedIndex((index) => clampIndex(index - 1, filtered.length));
+      moveSelection(-1);
     } else if (key.name === "return" || key.name === "enter") {
       key.preventDefault();
       const currentSelection = filtered[selectedIndex] ?? filtered[0];
@@ -71,26 +75,11 @@ export function ThemeModal(props: ThemeModalProps): JSX.Element {
       <text fg={props.current.colors.text.primary}>{countLabel}</text>
       <box flexDirection="row" style={{ gap: 1, alignItems: "center" }}>
         <text fg={props.current.colors.text.primary}>Filter:</text>
-        <textarea
-          ref={searchRef}
+        <FilterInput
+          textareaRef={searchRef}
           placeholder="type to filter"
-          keyBindings={[{ name: "return", action: "submit" }]}
-          onSubmit={handleSubmit}
-          onContentChange={handleContentChange}
-          onCursorChange={handleCursorChange}
-          style={{
-            height: 1,
-            width: "90%",
-            minHeight: 1,
-            maxHeight: 1,
-            paddingLeft: 0,
-            paddingRight: 0,
-            paddingTop: 0,
-            paddingBottom: 0,
-            fg: props.current.colors.input.fg,
-            bg: props.current.colors.input.bg,
-            borderColor: props.current.colors.input.border
-          }}
+          theme={props.current}
+          onQueryChange={handleQueryChange}
         />
       </box>
       <box flexDirection="row" style={{ gap: 1, height: 14 }}>
@@ -134,13 +123,15 @@ function renderThemeRow(
 ): JSX.Element {
   const isSelected = index === selectedIndex;
   const isActive = theme.slug === activeSlug;
-  const bullet = isSelected ? "●" : "○";
-  const activeTag = isActive ? " (active)" : "";
-  const label = `${bullet} ${theme.name}${activeTag}`;
   return (
-    <text key={theme.slug} fg={isSelected ? displayTheme.colors.accent.primary : displayTheme.colors.text.primary}>
-      {label}
-    </text>
+    <SelectableListItem
+      key={theme.slug}
+      label={theme.name}
+      isSelected={isSelected}
+      isActive={isActive}
+      activeTag=" (active)"
+      theme={displayTheme}
+    />
   );
 }
 
@@ -172,21 +163,4 @@ function ThemePreview({ theme }: { readonly theme: ThemeDefinition }): JSX.Eleme
       </text>
     </box>
   );
-}
-
-function filterThemes(themes: ThemeDefinition[], query: string): ThemeDefinition[] {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return themes;
-  }
-  return themes.filter(
-    (theme) => theme.name.toLowerCase().includes(normalized) || theme.slug.toLowerCase().includes(normalized) || theme.kind.toLowerCase().includes(normalized)
-  );
-}
-
-function clampIndex(next: number, length: number): number {
-  if (length === 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(next, length - 1));
 }

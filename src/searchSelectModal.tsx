@@ -1,10 +1,12 @@
 import type { TextareaRenderable } from "@opentui/core";
-import { parseColor, stringToStyledText } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { filterItems, type SearchItem } from "./modalTypes";
+import { useCallback, useMemo, useRef, useState, type JSX } from "react";
+import { useFilteredList } from "./hooks/useListNavigation";
+import { type SearchItem } from "./modalTypes";
 import { ModalShell } from "./modalShell";
 import type { ThemeDefinition } from "./theme";
+import { FilterInput } from "./components/FilterInput";
+import { SelectableListItem } from "./components/SelectableList";
 
 const GRID_COLUMNS = 3;
 const SEARCH_PAGE_SIZE = GRID_COLUMNS * 6;
@@ -20,44 +22,32 @@ export interface SearchSelectProps {
   readonly theme?: ThemeDefinition;
 }
 
-interface SearchState {
-  readonly query: string;
-  readonly setQuery: (value: string) => void;
-  readonly selectedIndex: number;
-  readonly setSelectedIndex: (value: number) => void;
-}
-
 export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
   const searchRef = useRef<TextareaRenderable | null>(null);
-  const { query, setQuery, selectedIndex, setSelectedIndex } = useSearchState();
-  const filtered = useMemo(() => filterItems(props.items, query, props.alphabetical), [props.alphabetical, props.items, query]);
-  const { pageStart, visible, startDisplay, endDisplay } = getPagination(filtered, selectedIndex);
-  const current = filtered[selectedIndex];
-  const placeholderText = useMemo(() => {
-    const base = stringToStyledText("type to filter");
-    const fg = parseColor(props.theme?.colors.input.placeholder ?? props.theme?.colors.text.muted ?? "#888888");
-    return { ...base, chunks: base.chunks.map((chunk) => ({ ...chunk, fg })) };
-  }, [props.theme?.colors.input.placeholder, props.theme?.colors.text.muted]);
+  const [query, setQuery] = useState("");
 
-  const handleSubmit = useCallback(() => undefined, []);
-
-  const handleContentChange = useCallback(() => {
-    setQuery(searchRef.current?.plainText ?? "");
-  }, [setQuery]);
-
-  const handleCursorChange = useCallback(() => {
-    setQuery(searchRef.current?.plainText ?? "");
-  }, [setQuery]);
-
-  useEffect(() => {
-    searchRef.current?.focus();
+  const filterFn = useCallback((item: SearchItem, searchQuery: string): boolean => {
+    const normalized = searchQuery.trim().toLowerCase();
+    return item.label.toLowerCase().includes(normalized);
   }, []);
 
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query, setSelectedIndex]);
+  const { filteredItems, selectedIndex, moveSelection } = useFilteredList(props.items, query, filterFn);
 
-  useSearchSelectKeys(filtered, selectedIndex, setSelectedIndex, current, props.onSelect, props.onClose);
+  const sortedFiltered = useMemo(() => {
+    if (props.alphabetical === true) {
+      return [...filteredItems].sort((a, b) => a.label.localeCompare(b.label));
+    }
+    return filteredItems;
+  }, [filteredItems, props.alphabetical]);
+
+  const { pageStart, visible, startDisplay, endDisplay } = getPagination(sortedFiltered, selectedIndex);
+  const current = sortedFiltered[selectedIndex];
+
+  const handleQueryChange = useCallback((newQuery: string) => {
+    setQuery(newQuery);
+  }, []);
+
+  useSearchSelectKeys(sortedFiltered, selectedIndex, moveSelection, current, props.onSelect, props.onClose);
 
   return (
     <ModalShell
@@ -66,51 +56,26 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
       theme={props.theme}
       footer={props.footerHint ? <text fg={props.theme?.colors.text.muted}>{props.footerHint}</text> : undefined}
     >
-      <text fg={props.theme?.colors.text.primary}>{`Found ${filtered.length} of ${props.items.length} ${props.noun}`}</text>
+      <text fg={props.theme?.colors.text.primary}>{`Found ${sortedFiltered.length} of ${props.items.length} ${props.noun}`}</text>
       <box flexDirection="row" style={{ gap: 1, alignItems: "center" }}>
         <text fg={props.theme?.colors.text.primary}>{`${props.alphabetical === true ? "Search" : "Filter"}:`}</text>
-        <textarea
-          ref={searchRef}
-          placeholder={placeholderText}
-          keyBindings={[{ name: "return", action: "submit" }]}
-          onSubmit={handleSubmit}
-          onContentChange={handleContentChange}
-          onCursorChange={handleCursorChange}
-          style={{
-            height: 1,
-            width: "90%",
-            minHeight: 1,
-            maxHeight: 1,
-            paddingLeft: 0,
-            paddingRight: 0,
-            paddingTop: 0,
-            paddingBottom: 0,
-            fg: props.theme?.colors.input.fg,
-            bg: props.theme?.colors.input.bg,
-            borderColor: props.theme?.colors.input.border
-          }}
-          textColor={props.theme?.colors.input.fg}
-          focusedTextColor={props.theme?.colors.input.fg}
-          backgroundColor={props.theme?.colors.input.bg}
-          focusedBackgroundColor={props.theme?.colors.input.bg}
+        <FilterInput
+          textareaRef={searchRef}
+          placeholder="type to filter"
+          theme={props.theme}
+          onQueryChange={handleQueryChange}
         />
       </box>
-      <text fg={props.theme?.colors.text.primary}>{`Showing ${startDisplay}-${endDisplay} of ${filtered.length} rows`}</text>
+      <text fg={props.theme?.colors.text.primary}>{`Showing ${startDisplay}-${endDisplay} of ${sortedFiltered.length} rows`}</text>
       <SearchGrid items={visible} pageStart={pageStart} selectedIndex={selectedIndex} theme={props.theme} />
     </ModalShell>
   );
 }
 
-function useSearchState(): SearchState {
-  const [query, setQuery] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  return { query, setQuery, selectedIndex, setSelectedIndex };
-}
-
 function useSearchSelectKeys(
   filtered: SearchItem[],
   selectedIndex: number,
-  setSelectedIndex: (value: number) => void,
+  moveSelection: (delta: number) => void,
   current: SearchItem | undefined,
   onSelect: (item: SearchItem) => void,
   onClose: () => void
@@ -127,7 +92,7 @@ function useSearchSelectKeys(
       return;
     }
     const handlers: Record<string, () => void> = {
-      tab: () => moveSelection(selectedIndex + (key.shift ? -1 : 1), filtered.length, setSelectedIndex),
+      tab: () => moveSelection(key.shift ? -1 : 1),
       return: () => {
         if (current) {
           onSelect(current);
@@ -138,10 +103,10 @@ function useSearchSelectKeys(
           onSelect(current);
         }
       },
-      up: () => moveSelection(selectedIndex - GRID_COLUMNS, filtered.length, setSelectedIndex),
-      down: () => moveSelection(selectedIndex + GRID_COLUMNS, filtered.length, setSelectedIndex),
-      left: () => moveSelection(selectedIndex - 1, filtered.length, setSelectedIndex),
-      right: () => moveSelection(selectedIndex + 1, filtered.length, setSelectedIndex)
+      up: () => moveSelection(-GRID_COLUMNS),
+      down: () => moveSelection(GRID_COLUMNS),
+      left: () => moveSelection(-1),
+      right: () => moveSelection(1)
     };
     const handler = handlers[key.name];
     if (handler != null) {
@@ -174,13 +139,15 @@ function renderSearchGrid(items: SearchItem[], pageStart: number, selectedIndex:
 }
 
 function renderSearchItem(item: SearchItem, absoluteIndex: number, selectedIndex: number, width: number, theme?: ThemeDefinition): JSX.Element {
-  const bullet = absoluteIndex === selectedIndex ? "●" : "○";
-  const label = `${bullet} ${item.label}`.padEnd(width + 2, " ");
   const isSelected = absoluteIndex === selectedIndex;
   return (
-    <text key={item.id} fg={isSelected ? theme?.colors.accent.primary : theme?.colors.text.primary}>
-      {label}
-    </text>
+    <SelectableListItem
+      key={item.id}
+      label={item.label}
+      isSelected={isSelected}
+      width={width + 2}
+      theme={theme}
+    />
   );
 }
 
@@ -203,13 +170,4 @@ function chunkItems(list: SearchItem[], columns: number): SearchItem[][] {
     rows.push(list.slice(index, index + columns));
   }
   return rows;
-}
-
-function moveSelection(next: number, length: number, setSelectedIndex: (value: number) => void): void {
-  if (length === 0) {
-    setSelectedIndex(0);
-    return;
-  }
-  const clamped = Math.max(0, Math.min(next, length - 1));
-  setSelectedIndex(clamped);
 }
