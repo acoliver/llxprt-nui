@@ -1,7 +1,7 @@
 import type { TextareaRenderable } from "@opentui/core";
 import { parseColor, stringToStyledText } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { filterItems, type SearchItem } from "./modalTypes";
 import { ModalShell } from "./modalShell";
 import type { ThemeDefinition } from "./theme";
@@ -28,7 +28,7 @@ interface SearchState {
 }
 
 export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
-  const searchRef = useRef<TextareaRenderable>(null);
+  const searchRef = useRef<TextareaRenderable | null>(null);
   const { query, setQuery, selectedIndex, setSelectedIndex } = useSearchState();
   const filtered = useMemo(() => filterItems(props.items, query, props.alphabetical), [props.alphabetical, props.items, query]);
   const { pageStart, visible, startDisplay, endDisplay } = getPagination(filtered, selectedIndex);
@@ -38,6 +38,16 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
     const fg = parseColor(props.theme?.colors.input.placeholder ?? props.theme?.colors.text.muted ?? "#888888");
     return { ...base, chunks: base.chunks.map((chunk) => ({ ...chunk, fg })) };
   }, [props.theme?.colors.input.placeholder, props.theme?.colors.text.muted]);
+
+  const handleSubmit = useCallback(() => undefined, []);
+
+  const handleContentChange = useCallback(() => {
+    setQuery(searchRef.current?.plainText ?? "");
+  }, [setQuery]);
+
+  const handleCursorChange = useCallback(() => {
+    setQuery(searchRef.current?.plainText ?? "");
+  }, [setQuery]);
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -58,14 +68,14 @@ export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
     >
       <text fg={props.theme?.colors.text.primary}>{`Found ${filtered.length} of ${props.items.length} ${props.noun}`}</text>
       <box flexDirection="row" style={{ gap: 1, alignItems: "center" }}>
-        <text fg={props.theme?.colors.text.primary}>{`${props.alphabetical ? "Search" : "Filter"}:`}</text>
+        <text fg={props.theme?.colors.text.primary}>{`${props.alphabetical === true ? "Search" : "Filter"}:`}</text>
         <textarea
           ref={searchRef}
           placeholder={placeholderText}
           keyBindings={[{ name: "return", action: "submit" }]}
-          onSubmit={() => undefined}
-          onContentChange={() => setQuery(searchRef.current?.plainText ?? "")}
-          onCursorChange={() => setQuery(searchRef.current?.plainText ?? "")}
+          onSubmit={handleSubmit}
+          onContentChange={handleContentChange}
+          onCursorChange={handleCursorChange}
           style={{
             height: 1,
             width: "90%",
@@ -133,9 +143,9 @@ function useSearchSelectKeys(
       left: () => moveSelection(selectedIndex - 1, filtered.length, setSelectedIndex),
       right: () => moveSelection(selectedIndex + 1, filtered.length, setSelectedIndex)
     };
-    const handler = handlers[key.name ?? ""];
-    if (handler) {
-      key.preventDefault?.();
+    const handler = handlers[key.name];
+    if (handler != null) {
+      key.preventDefault();
       handler();
     }
   });

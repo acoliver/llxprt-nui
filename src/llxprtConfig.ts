@@ -35,7 +35,6 @@ export async function applyConfigCommand(
   const [rawCommand, ...rest] = tokens;
   const command = rawCommand.toLowerCase();
   const argument = rest.join(" ").trim();
-  const result: ConfigCommandResult = { handled: true, nextConfig: { ...current }, messages: [] };
 
   if (command === "provider") {
     if (!argument) {
@@ -148,13 +147,13 @@ async function applyProfile(args: string[], current: SessionConfig, options?: Ap
   const manager = options?.profileManager ?? new ProfileManager(profileDir);
   try {
     const profile = await manager.loadProfile(name);
-    const ephemeral = profile.ephemeralSettings ?? {};
+    const ephemeral = profile.ephemeralSettings;
     const provider = normalizeProvider(profile.provider);
     const baseUrl = (ephemeral["base-url"] ?? ephemeral.baseUrl ?? profile.baseUrl) as string | undefined;
     const keyFilePath = (ephemeral["auth-keyfile"] ?? ephemeral.authKeyfile ?? profile.authKeyfile) as
       | string
       | undefined;
-    const model = (profile.model ?? ephemeral.model) as string | undefined;
+    const model = (ephemeral.model ?? profile.model) as string | undefined;
 
     if (!provider || !baseUrl || !keyFilePath || !model) {
       return {
@@ -188,9 +187,6 @@ function normalizeProvider(input: string | undefined): ProviderKey | null {
 
 export function validateSessionConfig(config: SessionConfig, options?: { requireModel?: boolean }): string[] {
   const messages: string[] = [];
-  if (!config.provider) {
-    messages.push("Provider not set. Use /provider <openai|gemini|anthropic>.");
-  }
   if (!config.baseUrl?.trim()) {
     messages.push("Base URL not set. Use /baseurl <url>.");
   }
@@ -199,7 +195,7 @@ export function validateSessionConfig(config: SessionConfig, options?: { require
       messages.push("Model not set. Use /model <id>.");
     }
   }
-  const hasKey = Boolean(config.apiKey?.trim() || config.keyFilePath?.trim());
+  const hasKey = Boolean(config.apiKey?.trim() ?? config.keyFilePath?.trim());
   if (!hasKey) {
     messages.push("API key or keyfile not set. Use /key <token> or /keyfile <path>.");
   }

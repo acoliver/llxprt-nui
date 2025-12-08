@@ -15,7 +15,7 @@ export interface ModalShellProps {
 export function ModalShell(props: ModalShellProps): JSX.Element {
   useKeyboard((key) => {
     if (key.name === "escape") {
-      key.preventDefault?.();
+      key.preventDefault();
       props.onClose();
     }
   });

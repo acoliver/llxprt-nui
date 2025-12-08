@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { getLogger } from "../src/logger";
 
 type ViolationLevel = "warn" | "error";
 
@@ -142,13 +143,17 @@ function getFunctionName(node: ts.FunctionLikeDeclarationBase): string {
   return "<anonymous>";
 }
 
+const logger = getLogger("nui:check-limits");
+
 function reportViolations(results: Violation[]): void {
   const errors = results.filter((violation) => violation.level === "error");
-  const warnings = results.filter((violation) => violation.level === "warn");
 
   for (const violation of results) {
-    const logger = violation.level === "error" ? console.error : console.warn;
-    logger(violation.message);
+    if (violation.level === "error") {
+      logger.error(violation.message);
+    } else {
+      logger.warn(violation.message);
+    }
   }
 
   if (errors.length > 0) {
@@ -156,7 +161,7 @@ function reportViolations(results: Violation[]): void {
     return;
   }
 
-  if (warnings.length === 0) {
-    console.log("limit checks passed");
+  if (results.length === 0) {
+    logger.log("limit checks passed");
   }
 }

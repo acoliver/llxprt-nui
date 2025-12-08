@@ -20,8 +20,8 @@
     "bun": ">=1.0"
   },
   "dependencies": {
-    "@opentui/core": "file:reference/opentui/packages/core",
-    "@opentui/react": "file:reference/opentui/packages/react",
+    "@opentui/core": "workspace:*",
+    "@opentui/react": "workspace:*",
     "clipboardy": "^4.0.0",
     "react": "^19.2.1"
   },

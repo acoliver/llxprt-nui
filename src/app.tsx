@@ -131,7 +131,7 @@ function useChatStore(makeLineId: () => string) {
 }
 
 function useInputManager(
-  textareaRef: RefObject<TextareaRenderable>,
+  textareaRef: RefObject<TextareaRenderable | null>,
   appendLines: (role: Role, textLines: string[]) => void,
   setPromptCount: StateSetter<number>,
   setAutoFollow: StateSetter<boolean>,
@@ -146,7 +146,7 @@ function useInputManager(
 
   const enforceInputLineBounds = useCallback(() => {
     const editor = textareaRef.current;
-    if (!editor) {
+    if (editor == null) {
       return;
     }
     const clamped = clampInputLines(editor.lineCount);
@@ -156,7 +156,7 @@ function useInputManager(
 
   const handleSubmit = useCallback(async () => {
     const editor = textareaRef.current;
-    if (!editor) {
+    if (editor == null) {
       return;
     }
     const raw = editor.plainText.trimEnd();
@@ -186,7 +186,7 @@ function useInputManager(
     clearCompletion();
     editor.submit();
     await startStreamingResponder(trimmed);
-  }, [appendLines, clearCompletion, handleCommand, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
+  }, [appendLines, clearCompletion, handleCommand, recordHistory, setAutoFollow, setPromptCount, startStreamingResponder, textareaRef]);
 
   const handleTabComplete = useCallback(
     () => {
@@ -199,26 +199,26 @@ function useInputManager(
   return { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete };
 }
 
-function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
+function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable | null>) {
   const [autoFollow, setAutoFollow] = useState(true);
 
   const scrollToBottom = useCallback(() => {
     const scrollBox = scrollRef.current;
-    if (!scrollBox) {
+    if (scrollBox == null) {
       return;
     }
     scrollBox.scrollTo({ x: 0, y: scrollBox.scrollHeight });
   }, [scrollRef]);
 
   const isAtBottom = useCallback((box: ScrollBoxRenderable): boolean => {
-    const viewportHeight = box.viewport.height ?? 0;
+    const viewportHeight = box.viewport.height;
     return box.scrollTop + viewportHeight >= box.scrollHeight - 1;
   }, []);
 
   const scrollBy = useCallback(
     (delta: number) => {
       const scrollBox = scrollRef.current;
-      if (!scrollBox) {
+      if (scrollBox == null) {
         return;
       }
       scrollBox.scrollTo({ x: 0, y: scrollBox.scrollTop + delta });
@@ -248,7 +248,7 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
         return;
       }
       const scrollBox = scrollRef.current;
-      if (!scrollBox) {
+      if (scrollBox == null) {
         return;
       }
       setAutoFollow(isAtBottom(scrollBox));
@@ -266,7 +266,9 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
     } else if (key.name === "home") {
       setAutoFollow(false);
       const scrollBox = scrollRef.current;
-      scrollBox?.scrollTo({ y: 0 });
+      if (scrollBox != null) {
+        scrollBox.scrollTo({ y: 0 });
+      }
     } else if (key.ctrl && key.name === "b") {
       scrollBy(-SCROLL_STEP);
     } else if (key.ctrl && key.name === "f") {
@@ -280,9 +282,9 @@ function useScrollManagement(scrollRef: RefObject<ScrollBoxRenderable>) {
 interface ChatLayoutProps {
   readonly headerText: string;
   readonly lines: (ChatLine | ToolBlock)[];
-  readonly scrollRef: RefObject<ScrollBoxRenderable>;
+  readonly scrollRef: RefObject<ScrollBoxRenderable | null>;
   readonly autoFollow: boolean;
-  readonly textareaRef: RefObject<TextareaRenderable>;
+  readonly textareaRef: RefObject<TextareaRenderable | null>;
   readonly inputLineCount: number;
   readonly enforceInputLineBounds: () => void;
   readonly handleSubmit: () => void;
@@ -298,7 +300,7 @@ interface ChatLayoutProps {
 }
 
 interface InputAreaProps {
-  readonly textareaRef: RefObject<TextareaRenderable>;
+  readonly textareaRef: RefObject<TextareaRenderable | null>;
   readonly containerHeight: number;
   readonly textareaHeight: number;
   readonly handleSubmit: () => void;
@@ -314,7 +316,7 @@ interface SuggestionPanelProps {
 
 interface ScrollbackProps {
   readonly lines: (ChatLine | ToolBlock)[];
-  readonly scrollRef: RefObject<ScrollBoxRenderable>;
+  readonly scrollRef: RefObject<ScrollBoxRenderable | null>;
   readonly autoFollow: boolean;
   readonly onScroll: (event: { type: string }) => void;
   readonly theme: ThemeDefinition;
@@ -658,7 +660,7 @@ function roleColor(role: Role, theme: ThemeDefinition): string {
 }
 
 function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element {
-  const content = block.scrollable ? (
+  const content = block.scrollable === true ? (
     <scrollbox
       style={{
         paddingLeft: 0,
@@ -707,7 +709,7 @@ function renderToolBlock(block: ToolBlock, theme: ThemeDefinition): JSX.Element 
       }}
     >
       {content}
-      {block.streaming ? (
+      {block.streaming === true ? (
         <text fg={theme.colors.text.muted} key={`${block.id}-streaming`}>
           ...streaming...
         </text>
@@ -735,9 +737,9 @@ function useEnterSubmit(onSubmit: () => void, isBlocked: boolean): void {
       logEnterKey(key);
     }
     if (isEnterLike && !isBlocked) {
-      const hasModifier = key.shift || key.ctrl || key.meta || key.option || key.super;
+      const hasModifier = key.shift === true || key.ctrl === true || key.meta === true || key.option === true || key.super === true;
       if (!hasModifier) {
-        key.preventDefault?.();
+        key.preventDefault();
         onSubmit();
       }
     }
@@ -762,9 +764,11 @@ function logAnyKey(key: KeyEvent): void {
   }
 }
 
-function useFocusAndMount(textareaRef: RefObject<TextareaRenderable>, mountedRef: RefObject<boolean>): void {
+function useFocusAndMount(textareaRef: RefObject<TextareaRenderable | null>, mountedRef: RefObject<boolean>): void {
   useEffect(() => {
-    textareaRef.current?.focus();
+    if (textareaRef.current != null) {
+      textareaRef.current.focus();
+    }
     return () => {
       mountedRef.current = false;
     };
@@ -790,13 +794,13 @@ function useSuggestionKeybindings(
   const hasSuggestions = suggestionCount > 0;
   useKeyboard((key) => {
     if (hasSuggestions && key.name === "down") {
-      key.preventDefault?.();
+      key.preventDefault();
       moveSelection(1);
     } else if (hasSuggestions && key.name === "up") {
-      key.preventDefault?.();
+      key.preventDefault();
       moveSelection(-1);
     } else if (hasSuggestions && key.name === "tab") {
-      key.preventDefault?.();
+      key.preventDefault();
       handleTabComplete();
     } else if (key.name === "escape") {
       if (isStreaming()) {
@@ -823,8 +827,8 @@ function useLineIdGenerator(): () => string {
 }
 
 export function App(): JSX.Element {
-  const scrollRef = useRef<ScrollBoxRenderable>(null);
-  const textareaRef = useRef<TextareaRenderable>(null);
+  const scrollRef = useRef<ScrollBoxRenderable | null>(null);
+  const textareaRef = useRef<TextareaRenderable | null>(null);
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -891,7 +895,11 @@ export function App(): JSX.Element {
 
   const { modalOpen, modalElement, handleCommand: handleModalCommand } = useModalManager(
     appendLines,
-    () => textareaRef.current?.focus(),
+    () => {
+      if (textareaRef.current != null) {
+        textareaRef.current.focus();
+      }
+    },
     themes,
     theme,
     (next) => setThemeBySlug(next.slug),
@@ -956,7 +964,9 @@ export function App(): JSX.Element {
 
   const cancelStreaming = useCallback(() => {
     streamRunId.current += 1;
-    abortRef.current?.abort();
+    if (abortRef.current != null) {
+      abortRef.current.abort();
+    }
     setStreamState("idle");
   }, [setStreamState]);
 
@@ -976,7 +986,11 @@ export function App(): JSX.Element {
   const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
   const handleMouseUp = useSelectionClipboard(renderer);
 
-  useEnterSubmit(handleSubmit, modalOpen);
+  const handleSubmitWrapped = useCallback(() => {
+    void handleSubmit();
+  }, [handleSubmit]);
+
+  useEnterSubmit(() => void handleSubmit(), modalOpen);
   useKeyPressLogging();
   useSuggestionKeybindings(
     modalOpen ? 0 : suggestions.length,
@@ -984,7 +998,9 @@ export function App(): JSX.Element {
     handleTabComplete,
     cancelStreaming,
     () => {
-      textareaRef.current?.clear();
+      if (textareaRef.current != null) {
+        textareaRef.current.clear();
+      }
       enforceInputLineBounds();
       return Promise.resolve();
     },
@@ -997,7 +1013,7 @@ export function App(): JSX.Element {
     if (key.name === "up" || key.name === "down") {
       const handled = handleHistoryKey(key.name);
       if (handled) {
-        key.preventDefault?.();
+        key.preventDefault();
       }
     }
   });
@@ -1012,7 +1028,7 @@ export function App(): JSX.Element {
         textareaRef={textareaRef}
         inputLineCount={inputLineCount}
         enforceInputLineBounds={enforceInputLineBounds}
-        handleSubmit={handleSubmit}
+        handleSubmit={handleSubmitWrapped}
         statusLabel={statusLabel}
         promptCount={promptCount}
         responderWordCount={responderWordCount}
@@ -1034,14 +1050,24 @@ function clampInputLines(value: number): number {
 
 function useSelectionClipboard(renderer: unknown): () => void {
   return useCallback(() => {
-    const selection = (renderer as { getSelection?: () => { getSelectedText?: () => string | null } | null })?.getSelection?.();
-    const text = selection?.getSelectedText?.() ?? "";
-    if (!text) {
+    const rendererWithSelection = renderer as { getSelection?: () => { getSelectedText?: () => string | null } | null };
+    if (rendererWithSelection.getSelection == null) {
+      return;
+    }
+    const selection = rendererWithSelection.getSelection();
+    if (selection?.getSelectedText == null) {
+      return;
+    }
+    const text = selection.getSelectedText() ?? "";
+    if (text.length === 0) {
       return;
     }
     const osc = buildOsc52(text);
     try {
-      (renderer as { writeOut?: (chunk: string) => void })?.writeOut?.(osc);
+      const rendererWithWrite = renderer as { writeOut?: (chunk: string) => void };
+      if (rendererWithWrite.writeOut != null) {
+        rendererWithWrite.writeOut(osc);
+      }
     } catch {
       // ignore renderer write failures
     }

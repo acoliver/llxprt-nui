@@ -38,19 +38,17 @@ export type AdapterEvent =
   | { readonly type: "thinking"; readonly lines: string[] }
   | { readonly type: "tool"; readonly header: string; readonly lines: string[] };
 
-type RuntimeContext = unknown;
-
 const maybeCreateProviderRuntimeContext = (llxprtCore as {
   createProviderRuntimeContext?: (options: {
     settingsService: SettingsService;
     config: Config;
     runtimeId?: string;
     metadata?: Record<string, unknown>;
-  }) => RuntimeContext;
+  }) => unknown;
 }).createProviderRuntimeContext;
 
 const maybeSetActiveProviderRuntimeContext = (llxprtCore as {
-  setActiveProviderRuntimeContext?: (context: RuntimeContext) => void;
+  setActiveProviderRuntimeContext?: (context: unknown) => void;
 }).setActiveProviderRuntimeContext;
 
 const maybeGetSettingsService = (llxprtCore as {
@@ -114,7 +112,7 @@ export async function* sendMessage(
   });
 
   for await (const content of iterator) {
-    if (signal?.aborted) {
+    if (signal?.aborted === true) {
       break;
     }
     yield* mapContentToEvents(content);
@@ -215,7 +213,7 @@ function isRuntimeAwareProvider(
 function buildSessionContext(session: SessionConfig): {
   settings: SettingsService;
   config: Config;
-  runtime?: RuntimeContext;
+  runtime?: unknown;
 } {
   const settings = acquireSettingsService();
   settings.set("base-url", session.baseUrl ?? "");
@@ -308,8 +306,8 @@ function createConfigStub(settings: SettingsService, session: SessionConfig): Co
   return config;
 }
 
-function withActiveRuntime(runtime: RuntimeContext | undefined): void {
-  if (runtime && typeof maybeSetActiveProviderRuntimeContext === "function") {
+function withActiveRuntime(runtime: unknown): void {
+  if (runtime !== undefined && typeof maybeSetActiveProviderRuntimeContext === "function") {
     maybeSetActiveProviderRuntimeContext(runtime);
   }
 }
@@ -332,7 +330,7 @@ function startChatIterator(
     contents: IContent[];
     settings: SettingsService;
     config: Config;
-    runtime?: RuntimeContext;
+    runtime?: unknown;
     authProvider: { provide: () => Promise<string | undefined> };
     signal?: AbortSignal;
   }

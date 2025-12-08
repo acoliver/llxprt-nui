@@ -50,12 +50,8 @@ export function useModalManager(
   const handleProviderSelect = useCallback(
     (item: SearchItem) => {
       const id = item.id.toLowerCase() as ProviderKey;
-      if (id === "openai" || id === "gemini" || id === "anthropic") {
-        setSessionConfig({ ...sessionConfig, provider: id });
-        appendLines("responder", [`Selected provider: ${item.label}`]);
-      } else {
-        appendLines("responder", [`Unsupported provider: ${item.id}`]);
-      }
+      setSessionConfig({ ...sessionConfig, provider: id });
+      appendLines("responder", [`Selected provider: ${item.label}`]);
       closeModal();
     },
     [appendLines, closeModal, sessionConfig, setSessionConfig]
@@ -70,6 +66,14 @@ export function useModalManager(
     [appendLines]
   );
 
+  const handleThemeSelect = useCallback(
+    (theme: ThemeDefinition) => {
+      onThemeSelect(theme);
+      appendLines("responder", [`Theme set to ${theme.name}`]);
+    },
+    [appendLines, onThemeSelect]
+  );
+
   const modalElement: JSX.Element | null = useMemo(
     () =>
       renderModal(
@@ -81,10 +85,9 @@ export function useModalManager(
         authOptions,
         themes,
         currentTheme,
-        onThemeSelect,
-        appendLines
+        handleThemeSelect
       ),
-    [appendLines, authOptions, closeModal, currentTheme, handleAuthSave, handleModelSelect, handleProviderSelect, modal, onThemeSelect, themes]
+    [authOptions, closeModal, currentTheme, handleAuthSave, handleModelSelect, handleProviderSelect, handleThemeSelect, modal, themes]
   );
 
   const handleCommand = useCallback(
@@ -95,7 +98,7 @@ export function useModalManager(
       }
       if (modalType === "model") {
         const result = await fetchModelItems();
-        if (result.messages?.length) {
+        if ((result.messages?.length ?? 0) > 0) {
           appendLines("responder", result.messages);
         }
         if (result.items.length === 0) {
@@ -106,7 +109,7 @@ export function useModalManager(
       }
       if (modalType === "provider") {
         const result = await fetchProviderItems();
-        if (result.messages?.length) {
+        if ((result.messages?.length ?? 0) > 0) {
           appendLines("responder", result.messages);
         }
         if (result.items.length === 0) {
@@ -133,10 +136,11 @@ function renderModal(
   authOptions: AuthOption[],
   themes: ThemeDefinition[],
   currentTheme: ThemeDefinition,
-  onThemeSelect: (theme: ThemeDefinition) => void,
-  appendLines: (role: "user" | "responder", textLines: string[]) => void
+  handleThemeSelect: (theme: ThemeDefinition) => void
 ): JSX.Element | null {
   switch (modal.type) {
+    case "none":
+      return null;
     case "model":
       return (
         <SearchSelectModal
@@ -171,13 +175,8 @@ function renderModal(
           themes={themes}
           current={currentTheme}
           onClose={closeModal}
-          onSelect={(theme) => {
-            onThemeSelect(theme);
-            appendLines("responder", [`Theme set to ${theme.name}`]);
-          }}
+          onSelect={handleThemeSelect}
         />
       );
-    default:
-      return null;
   }
 }

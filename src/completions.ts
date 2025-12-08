@@ -16,7 +16,7 @@ export interface CompletionSuggestion {
 
 const SLASH_SUGGESTION_LIMIT = 50;
 
-export function useCompletionManager(textareaRef: RefObject<TextareaRenderable>) {
+export function useCompletionManager(textareaRef: RefObject<TextareaRenderable | null>) {
   const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const slashContext = useRef<{ start: number; end: number } | null>(null);
@@ -27,7 +27,7 @@ export function useCompletionManager(textareaRef: RefObject<TextareaRenderable>)
   }, []);
   const refresh = useCallback(() => {
     const editor = textareaRef.current;
-    if (!editor) {
+    if (editor == null) {
       return;
     }
     const text = editor.plainText;
@@ -68,7 +68,7 @@ export function useCompletionManager(textareaRef: RefObject<TextareaRenderable>)
   );
   const applySelection = useCallback(() => {
     const editor = textareaRef.current;
-    if (!editor) {
+    if (editor == null) {
       return;
     }
     const current = suggestions[selectedIndex];
@@ -77,16 +77,16 @@ export function useCompletionManager(textareaRef: RefObject<TextareaRenderable>)
     }
     if (current.mode === "mention") {
       applyMentionCompletion(editor, current);
+      reset();
       return;
     }
-    if (current.mode === "slash") {
-      if (!slashContext.current) {
-        return;
-      }
-      applySlashCompletion(editor, slashContext.current, current);
-      slashContext.current = null;
+    // current.mode === "slash" at this point
+    if (slashContext.current == null) {
+      return;
     }
-    if (current.mode === "slash" && current.hasChildren) {
+    applySlashCompletion(editor, slashContext.current, current);
+    slashContext.current = null;
+    if (current.hasChildren ?? false) {
       refresh();
     } else {
       reset();

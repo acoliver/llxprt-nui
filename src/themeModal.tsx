@@ -1,5 +1,5 @@
 import { useKeyboard } from "@opentui/react";
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { TextareaRenderable } from "@opentui/core";
 import { ModalShell } from "./modalShell";
 import type { ThemeDefinition } from "./theme";
@@ -12,12 +12,22 @@ export interface ThemeModalProps {
 }
 
 export function ThemeModal(props: ThemeModalProps): JSX.Element {
-  const searchRef = useRef<TextareaRenderable>(null);
+  const searchRef = useRef<TextareaRenderable | null>(null);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const filtered = useMemo(() => filterThemes(props.themes, query), [props.themes, query]);
   const selected = filtered[selectedIndex] ?? filtered[0] ?? props.current;
+
+  const handleSubmit = useCallback(() => undefined, []);
+
+  const handleContentChange = useCallback(() => {
+    setQuery(searchRef.current?.plainText ?? "");
+  }, []);
+
+  const handleCursorChange = useCallback(() => {
+    setQuery(searchRef.current?.plainText ?? "");
+  }, []);
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -39,13 +49,13 @@ export function ThemeModal(props: ThemeModalProps): JSX.Element {
       return;
     }
     if (key.name === "down") {
-      key.preventDefault?.();
+      key.preventDefault();
       setSelectedIndex((index) => clampIndex(index + 1, filtered.length));
     } else if (key.name === "up") {
-      key.preventDefault?.();
+      key.preventDefault();
       setSelectedIndex((index) => clampIndex(index - 1, filtered.length));
     } else if (key.name === "return" || key.name === "enter") {
-      key.preventDefault?.();
+      key.preventDefault();
       const currentSelection = filtered[selectedIndex] ?? filtered[0];
       if (currentSelection) {
         props.onSelect(currentSelection);
@@ -65,9 +75,9 @@ export function ThemeModal(props: ThemeModalProps): JSX.Element {
           ref={searchRef}
           placeholder="type to filter"
           keyBindings={[{ name: "return", action: "submit" }]}
-          onSubmit={() => undefined}
-          onContentChange={() => setQuery(searchRef.current?.plainText ?? "")}
-          onCursorChange={() => setQuery(searchRef.current?.plainText ?? "")}
+          onSubmit={handleSubmit}
+          onContentChange={handleContentChange}
+          onCursorChange={handleCursorChange}
           style={{
             height: 1,
             width: "90%",

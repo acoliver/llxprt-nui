@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import * as os from "node:os";
+import * as path from "node:path";
 import { applyConfigCommand, validateSessionConfig } from "./llxprtConfig";
 import type { SessionConfig } from "./llxprtAdapter";
 
@@ -15,7 +17,7 @@ describe("applyConfigCommand", () => {
   it("defers empty provider to caller", async () => {
     const result = await applyConfigCommand("/provider", BASE_CONFIG);
     expect(result.handled).toBe(false);
-    expect(result.nextConfig).toEqual(BASE_CONFIG);
+    expect(result.nextConfig).toStrictEqual(BASE_CONFIG);
   });
 
   it("rejects unknown provider", async () => {
@@ -32,14 +34,15 @@ describe("applyConfigCommand", () => {
   });
 
   it("sets key and clears keyfile", async () => {
-    const result = await applyConfigCommand("/key secret", { ...BASE_CONFIG, keyFilePath: "/tmp/key" });
+    const result = await applyConfigCommand("/key secret", { ...BASE_CONFIG, keyFilePath: path.join(os.tmpdir(), "nui-test-key") });
     expect(result.nextConfig.apiKey).toBe("secret");
     expect(result.nextConfig.keyFilePath).toBeUndefined();
   });
 
   it("sets keyfile and clears key", async () => {
-    const result = await applyConfigCommand("/keyfile /tmp/keyfile", { ...BASE_CONFIG, apiKey: "old" });
-    expect(result.nextConfig.keyFilePath).toBe("/tmp/keyfile");
+    const testKeyPath = path.join(os.tmpdir(), "nui-test-keyfile");
+    const result = await applyConfigCommand(`/keyfile ${testKeyPath}`, { ...BASE_CONFIG, apiKey: "old" });
+    expect(result.nextConfig.keyFilePath).toBe(testKeyPath);
     expect(result.nextConfig.apiKey).toBeUndefined();
   });
 
@@ -51,13 +54,13 @@ describe("applyConfigCommand", () => {
   it("defers empty model to caller", async () => {
     const result = await applyConfigCommand("/model", BASE_CONFIG);
     expect(result.handled).toBe(false);
-    expect(result.nextConfig).toEqual(BASE_CONFIG);
+    expect(result.nextConfig).toStrictEqual(BASE_CONFIG);
   });
 
   it("ignores unknown command", async () => {
     const result = await applyConfigCommand("/unknown foo", BASE_CONFIG);
     expect(result.handled).toBe(false);
-    expect(result.nextConfig).toEqual(BASE_CONFIG);
+    expect(result.nextConfig).toStrictEqual(BASE_CONFIG);
   });
 
   it("loads profile when complete with load action", async () => {
@@ -92,7 +95,7 @@ describe("applyConfigCommand", () => {
 
     const result = await applyConfigCommand("/profile load synthetic", BASE_CONFIG, { profileManager: manager });
     expect(result.messages[0]).toContain("incomplete");
-    expect(result.nextConfig).toEqual(BASE_CONFIG);
+    expect(result.nextConfig).toStrictEqual(BASE_CONFIG);
   });
 
   it("validates missing pieces", () => {
@@ -116,15 +119,15 @@ class FakeProfileManager {
     this.profiles = profiles;
   }
 
-  async loadProfile(name: string): Promise<unknown> {
+  loadProfile(name: string): Promise<unknown> {
     const profile = this.profiles[name];
-    if (!profile) {
-      throw new Error(`Profile '${name}' not found`);
+    if (profile === undefined) {
+      return Promise.reject(new Error(`Profile '${name}' not found`));
     }
-    return profile;
+    return Promise.resolve(profile);
   }
 
-  async listProfiles(): Promise<string[]> {
-    return Object.keys(this.profiles);
+  listProfiles(): Promise<string[]> {
+    return Promise.resolve(Object.keys(this.profiles));
   }
 }

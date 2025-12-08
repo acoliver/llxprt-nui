@@ -3,7 +3,7 @@ import { useCallback, useRef, type RefObject } from "react";
 
 type Direction = "up" | "down";
 
-export function usePromptHistory(textareaRef: RefObject<TextareaRenderable>): {
+export function usePromptHistory(textareaRef: RefObject<TextareaRenderable | null>): {
   record: (prompt: string) => void;
   handleHistoryKey: (direction: Direction) => boolean;
 } {
@@ -21,7 +21,7 @@ export function usePromptHistory(textareaRef: RefObject<TextareaRenderable>): {
       if (entries.current.length === 0) {
         return false;
       }
-      if (!textareaRef.current) {
+      if (textareaRef.current == null) {
         return false;
       }
       if (direction === "up") {

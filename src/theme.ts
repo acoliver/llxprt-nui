@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { getLogger } from "./logger";
 
 export type ThemeKind = "light" | "dark" | "ansi" | "custom";
 
@@ -62,6 +63,8 @@ export interface ThemeDefinition {
 const THEMES_DIR = path.resolve(process.cwd(), "themes");
 export const DEFAULT_THEME_SLUG = "green-screen";
 
+const logger = getLogger("nui:theme");
+
 export function loadThemes(): ThemeDefinition[] {
   try {
     const files = readdirSync(THEMES_DIR).filter((file) => file.endsWith(".json"));
@@ -72,7 +75,7 @@ export function loadThemes(): ThemeDefinition[] {
     });
     return themes;
   } catch (error) {
-    console.error("Failed to load themes:", error);
+    logger.error("Failed to load themes:", error);
     return [];
   }
 }

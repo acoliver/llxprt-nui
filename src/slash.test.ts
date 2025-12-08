@@ -60,7 +60,7 @@ describe("slash suggestions", () => {
 describe("extractSlashContext", () => {
   it("extracts at start of line", () => {
     const ctx = extractSlashContext("/st", 3);
-    expect(ctx?.parts).toEqual(["st"]);
+    expect(ctx?.parts).toStrictEqual(["st"]);
   });
 
   it("returns null when not preceded by space boundary", () => {

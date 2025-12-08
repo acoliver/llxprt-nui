@@ -1,5 +1,5 @@
 import { useKeyboard } from "@opentui/react";
-import { useState, type JSX } from "react";
+import { useCallback, useState, type JSX } from "react";
 import { ModalShell } from "./modalShell";
 import type { ThemeDefinition } from "./theme";
 
@@ -18,10 +18,10 @@ export function AuthModal(props: {
   const [options, setOptions] = useState<AuthOption[]>(props.options);
   const [index, setIndex] = useState(0);
 
-  const closeWithSave = (): void => {
+  const closeWithSave = useCallback((): void => {
     props.onSave(options);
     props.onClose();
-  };
+  }, [options, props]);
 
   useKeyboard((key) => {
     if (key.eventType !== "press") {
@@ -32,13 +32,13 @@ export function AuthModal(props: {
       return;
     }
     if (key.name === "up") {
-      key.preventDefault?.();
+      key.preventDefault();
       moveSelection(index - 1, options.length, setIndex);
     } else if (key.name === "down") {
-      key.preventDefault?.();
+      key.preventDefault();
       moveSelection(index + 1, options.length, setIndex);
     } else if (key.name === "return" || key.name === "enter") {
-      key.preventDefault?.();
+      key.preventDefault();
       const current = options[index];
       if (!current) {
         return;

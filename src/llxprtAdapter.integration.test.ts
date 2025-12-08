@@ -47,47 +47,49 @@ function normalizeProvider(raw?: string): ProviderKey | null {
 const syntheticSession = loadSyntheticSession();
 const describeSynthetic = syntheticSession ? describe : describe.skip;
 
-describeSynthetic("llxprtAdapter synthetic integration", () => {
-  it(
-    "lists models using the synthetic profile",
-    async () => {
-      const models = await listModels(syntheticSession as SessionConfig);
-      expect(models.length).toBeGreaterThan(0);
-      expect(models.some((entry) => entry.id === (syntheticSession as SessionConfig).model)).toBeTruthy();
-    },
-    30000
-  );
+describe("llxprtAdapter", () => {
+  describeSynthetic("llxprtAdapter synthetic integration", () => {
+    it(
+      "lists models using the synthetic profile",
+      async () => {
+        const models = await listModels(syntheticSession!);
+        expect(models.length).toBeGreaterThan(0);
+        expect(models.some((entry) => entry.id === syntheticSession!.model)).toBeTruthy();
+      },
+      30000
+    );
 
-  it(
-    "streams a short reply using the synthetic profile",
-    async () => {
-      const events: AdapterEvent[] = [];
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
+    it(
+      "streams a short reply using the synthetic profile",
+      async () => {
+        const events: AdapterEvent[] = [];
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
 
-      try {
-        for await (const event of sendMessage(
-          syntheticSession as SessionConfig,
-          "Say hello in a single short sentence and stop.",
-          controller.signal
-        )) {
-          events.push(event);
-          const textLineCount = events
-            .filter((entry): entry is Extract<AdapterEvent, { type: "text" }> => entry.type === "text")
-            .flatMap((entry) => entry.lines).length;
-          if (textLineCount >= 2) {
-            break;
+        try {
+          for await (const event of sendMessage(
+            syntheticSession!,
+            "Say hello in a single short sentence and stop.",
+            controller.signal
+          )) {
+            events.push(event);
+            const textLineCount = events
+              .filter((entry): entry is Extract<AdapterEvent, { type: "text" }> => entry.type === "text")
+              .flatMap((entry) => entry.lines).length;
+            if (textLineCount >= 2) {
+              break;
+            }
           }
+        } finally {
+          clearTimeout(timeout);
         }
-      } finally {
-        clearTimeout(timeout);
-      }
 
-      const textLines = events
-        .filter((entry): entry is Extract<AdapterEvent, { type: "text" }> => entry.type === "text")
-        .flatMap((entry) => entry.lines);
-      expect(textLines.length).toBeGreaterThan(0);
-    },
-    45000
-  );
+        const textLines = events
+          .filter((entry): entry is Extract<AdapterEvent, { type: "text" }> => entry.type === "text")
+          .flatMap((entry) => entry.lines);
+        expect(textLines.length).toBeGreaterThan(0);
+      },
+      45000
+    );
+  });
 });

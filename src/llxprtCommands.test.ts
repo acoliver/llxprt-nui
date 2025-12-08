@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { SessionConfig } from "./llxprtAdapter";
 import { handleModelListCommand } from "./llxprtCommands";
 
 const BASE: SessionConfig = {
   provider: "openai",
   baseUrl: "https://example.test/api",
-  keyFilePath: "/tmp/key",
+  keyFilePath: path.join(os.tmpdir(), "nui-test-key"),
   model: "dummy"
 };
 

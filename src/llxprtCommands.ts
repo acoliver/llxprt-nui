@@ -21,7 +21,12 @@ export async function handleModelListCommand(
     if (models.length === 0) {
       return { handled: true, messages: ["No models returned by provider."] };
     }
-    const lines = ["Available models:"].concat(models.map((model) => `- ${model.id}${model.name ? ` (${model.name})` : ""}`));
+    const lines = ["Available models:"].concat(
+      models.map((model) => {
+        const namePart = model.name ? ` (${model.name})` : "";
+        return `- ${model.id}${namePart}`;
+      })
+    );
     return { handled: true, messages: lines };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

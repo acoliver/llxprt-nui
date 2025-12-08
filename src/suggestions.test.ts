@@ -38,7 +38,7 @@ describe("extractMentionQuery", () => {
 
   it("finds mention range for replacement", () => {
     const range = findMentionRange("test @pa th", 8);
-    expect(range).toEqual({ start: 5, end: 8 });
+    expect(range).toStrictEqual({ start: 5, end: 8 });
   });
 
   it("returns null range when none", () => {

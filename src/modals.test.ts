@@ -10,17 +10,17 @@ const SAMPLE_ITEMS: SearchItem[] = [
 describe("filterItems", () => {
   it("filters by substring", () => {
     const result = filterItems(SAMPLE_ITEMS, "al");
-    expect(result.map((item) => item.id)).toEqual(["a"]);
+    expect(result.map((item) => item.id)).toStrictEqual(["a"]);
   });
 
   it("sorts alphabetically when requested", () => {
     const result = filterItems(SAMPLE_ITEMS, "", true);
-    expect(result.map((item) => item.id)).toEqual(["a", "b", "g"]);
+    expect(result.map((item) => item.id)).toStrictEqual(["a", "b", "g"]);
   });
 
   it("preserves order when not sorting", () => {
     const reversed = [...SAMPLE_ITEMS].reverse();
     const result = filterItems(reversed, "");
-    expect(result.map((item) => item.id)).toEqual(["g", "b", "a"]);
+    expect(result.map((item) => item.id)).toStrictEqual(["g", "b", "a"]);
   });
 });
