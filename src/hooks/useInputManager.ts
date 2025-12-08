@@ -66,8 +66,7 @@ export function useInputManager(
       process.exit(0);
     }
     recordHistory(raw);
-    const userLines = raw.split(/\r?\n/);
-    appendLines("user", userLines);
+    appendLines("user", [raw]);
     setPromptCount((count) => count + 1);
     editor.clear();
     setInputLineCount(MIN_INPUT_LINES);
