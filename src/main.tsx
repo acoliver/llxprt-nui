@@ -5,7 +5,8 @@ import { App } from "./app";
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
   useMouse: true,
-  useAlternateScreen: true
+  useAlternateScreen: true,
+  useKittyKeyboard: true
 });
 
 createRoot(renderer).render(<App />);

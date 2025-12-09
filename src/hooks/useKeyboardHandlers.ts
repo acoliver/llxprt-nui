@@ -4,12 +4,13 @@ import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useRef } from "react";
 
 function isEnterKey(key: KeyEvent): boolean {
+  // Don't match linefeed (\n / shift+enter) - let textarea handle it as newline
   return (
     key.name === "return" ||
     key.name === "enter" ||
     key.name === "kpenter" ||
-    key.sequence === "\r" ||
-    key.sequence === "\n"
+    key.name === "kpplus" ||
+    key.sequence === "\r"
   );
 }
 

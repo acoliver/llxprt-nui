@@ -33,15 +33,18 @@ type ChatEntry = ChatMessage | ToolBlock;
 
 const MIN_INPUT_LINES = 1;
 const MAX_INPUT_LINES = 10;
+// Key bindings:
+// - Return submits
+// - Shift+Return sends linefeed (\n) which inserts newline
+// - Option+Return (meta) inserts newline
+// - Keypad enter (kpenter/kpplus) submits
 const TEXTAREA_KEY_BINDINGS = [
-  // Override default: plain return submits instead of newline
   { name: "return", action: "submit" },
-  // Modifier+return inserts newline
+  { name: "return", meta: true, action: "newline" },
   { name: "return", shift: true, action: "newline" },
-  { name: "return", ctrl: true, action: "newline" },
-  { name: "return", alt: true, action: "newline" },
-  // Additional submit triggers
+  { name: "linefeed", action: "newline" },
   { name: "kpenter", action: "submit" },
+  { name: "kpplus", action: "submit" },
 ];
 
 export interface ChatLayoutProps {

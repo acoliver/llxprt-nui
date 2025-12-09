@@ -34,6 +34,7 @@ function AppInner(): JSX.Element {
   const [sessionConfig, setSessionConfig] = useState<SessionConfig>({ provider: "openai" });
   const { themes, theme, setThemeBySlug } = useThemeManager();
   const renderer = useRenderer();
+
   const dialog = useDialog();
   const { trigger: triggerCommand } = useCommand();
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } = useCompletionManager(textareaRef);
