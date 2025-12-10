@@ -1,7 +1,6 @@
 import type { JSX } from "react";
 import type { ThemeDefinition } from "../../features/theme";
-
-type StreamState = "idle" | "streaming";
+import type { StreamState } from "../../hooks/useChatStore";
 
 export interface StatusBarProps {
   readonly statusLabel: string;
@@ -12,7 +11,7 @@ export interface StatusBarProps {
 }
 
 export function buildStatusLabel(streamState: StreamState, autoFollow: boolean): string {
-  const streamingPart = streamState === "streaming" ? "streaming" : "waiting";
+  const streamingPart = streamState === "busy" ? "busy" : "idle";
   const scrollPart = autoFollow ? "follow" : "scroll lock";
   return `${streamingPart} | ${scrollPart}`;
 }

@@ -2,9 +2,15 @@ import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useState } from "react";
 import type { MessageRole } from "../ui/components/messages";
 import type { ToolStatus, ToolConfirmationType } from "../types/events";
+import type { ToolCallConfirmationDetails } from "@vybestack/llxprt-code-core";
 
 type Role = MessageRole;
-type StreamState = "idle" | "streaming";
+/**
+ * Stream state represents whether the system is waiting for user input or busy with LLM operations.
+ * - "idle": Ready for user input
+ * - "busy": Processing (streaming from model, executing tools, or waiting for tool responses)
+ */
+type StreamState = "idle" | "busy";
 
 interface ChatMessage {
   id: string;
@@ -41,6 +47,8 @@ interface ToolCall {
     question: string;
     preview: string;
     canAllowAlways: boolean;
+    /** Full confirmation details from CoreToolScheduler (includes diff for edits) */
+    coreDetails?: ToolCallConfirmationDetails;
   };
 }
 

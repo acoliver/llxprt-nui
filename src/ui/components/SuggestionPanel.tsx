@@ -21,11 +21,16 @@ function renderSuggestionRow(
   const label = `${prefix}${item.value}`.padEnd(maxLabel + 1, " ");
   const description = item.description ? ` ${item.description}` : "";
   const rowText = `${label}${description}`;
+
+  // Use explicit colors to avoid rendering issues with selection
+  const bgColor = isSelected ? theme.colors.selection.bg : theme.colors.panel.bg;
+  const fgColor = isSelected ? theme.colors.selection.fg : theme.colors.text.primary;
+
   return (
     <text
       key={`suggestion-${globalIndex}`}
-      bg={isSelected ? theme.colors.accent.primary : undefined}
-      fg={isSelected ? theme.colors.selection.fg : theme.colors.text.primary}
+      bg={bgColor}
+      fg={fgColor}
       style={{ paddingLeft: 1, paddingRight: 1 }}
     >
       {rowText}

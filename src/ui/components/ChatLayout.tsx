@@ -4,14 +4,18 @@ import type { JSX, RefObject } from "react";
 import { useMemo } from "react";
 import type { CompletionSuggestion } from "../../features/completion";
 import type { ThemeDefinition } from "../../features/theme";
-import type { ToolStatus } from "../../types/events";
+import type { ToolStatus, ToolConfirmationType } from "../../types/events";
+import type { ToolCallConfirmationDetails } from "@vybestack/llxprt-code-core";
+import type { StreamState } from "../../hooks/useChatStore";
 import { HeaderBar } from "./HeaderBar";
 import { StatusBar } from "./StatusBar";
 import { SuggestionPanel } from "./SuggestionPanel";
 import { renderMessage, type MessageRole } from "./messages";
+import { DiffViewer } from "./DiffViewer";
+
+export type ToolApprovalOutcome = "allow_once" | "allow_always" | "cancel";
 
 type Role = MessageRole;
-type StreamState = "idle" | "streaming";
 
 interface ChatMessage {
   id: string;
@@ -40,11 +44,18 @@ interface ToolCall {
   output?: string;
   errorMessage?: string;
   confirmation?: {
-    confirmationType: string;
+    confirmationType: ToolConfirmationType;
     question: string;
     preview: string;
     canAllowAlways: boolean;
+    coreDetails?: ToolCallConfirmationDetails;
   };
+}
+
+/** Pending approval state passed from app to layout */
+export interface PendingApprovalState {
+  readonly callId: string;
+  readonly selectedIndex: number;
 }
 
 type ToolBlock = ToolBlockLegacy | ToolCall;
@@ -84,6 +95,12 @@ export interface ChatLayoutProps {
   readonly suggestions: CompletionSuggestion[];
   readonly selectedSuggestion: number;
   readonly theme: ThemeDefinition;
+  /** Pending approval state for inline tool approval */
+  readonly pendingApproval?: PendingApprovalState;
+  /** Callback when user selects an approval option */
+  readonly onApprovalSelect?: (callId: string, outcome: ToolApprovalOutcome) => void;
+  /** Whether input is disabled (e.g., during approval) */
+  readonly inputDisabled?: boolean;
 }
 
 interface ScrollbackProps {
@@ -92,6 +109,7 @@ interface ScrollbackProps {
   readonly autoFollow: boolean;
   readonly onScroll: (event: { type: string }) => void;
   readonly theme: ThemeDefinition;
+  readonly pendingApproval?: PendingApprovalState;
 }
 
 interface InputAreaProps {
@@ -101,6 +119,7 @@ interface InputAreaProps {
   readonly handleSubmit: () => void;
   readonly enforceInputLineBounds: () => void;
   readonly theme: ThemeDefinition;
+  readonly disabled?: boolean;
 }
 
 export function renderChatMessage(message: ChatMessage, theme: ThemeDefinition): JSX.Element {
@@ -135,9 +154,25 @@ function getStatusIndicator(status: ToolStatus, theme: ThemeDefinition): { symbo
 /**
  * Format tool parameters for display
  */
-function formatParams(params: Record<string, unknown>): string[] {
+function formatParams(params: Record<string, unknown> | string): string[] {
+  // Handle case where params might be a JSON string
+  let paramsObj: Record<string, unknown>;
+  if (typeof params === "string") {
+    try {
+      paramsObj = JSON.parse(params) as Record<string, unknown>;
+    } catch {
+      // If parsing fails, just display the string as-is
+      const displayValue = params.length > 80 ? params.slice(0, 77) + "..." : params;
+      return [`  ${displayValue}`];
+    }
+  } else if (params === null || params === undefined) {
+    return [];
+  } else {
+    paramsObj = params;
+  }
+
   const lines: string[] = [];
-  for (const [key, value] of Object.entries(params)) {
+  for (const [key, value] of Object.entries(paramsObj)) {
     const valueStr = typeof value === "string" ? value : JSON.stringify(value);
     // Truncate long values
     const displayValue = valueStr.length > 80 ? valueStr.slice(0, 77) + "..." : valueStr;
@@ -149,10 +184,97 @@ function formatParams(params: Record<string, unknown>): string[] {
 // Maximum height for tool output scrollbox before requiring scroll
 const TOOL_OUTPUT_MAX_HEIGHT = 10;
 
+/** Approval option labels */
+const APPROVAL_OPTIONS: { label: string; outcome: ToolApprovalOutcome }[] = [
+  { label: "[1] Yes, allow once", outcome: "allow_once" },
+  { label: "[2] Yes, allow always", outcome: "allow_always" },
+  { label: "[3] No, cancel (esc)", outcome: "cancel" },
+];
+
+interface InlineApprovalProps {
+  readonly tool: ToolCall;
+  readonly theme: ThemeDefinition;
+  readonly selectedIndex: number;
+}
+
+function renderInlineApproval({ tool, theme, selectedIndex }: InlineApprovalProps): JSX.Element {
+  const confirmation = tool.confirmation;
+  if (!confirmation) {
+    return <></>;
+  }
+
+  const coreDetails = confirmation.coreDetails;
+
+  // Render diff for edit confirmations
+  const renderPreview = (): JSX.Element => {
+    if (confirmation.confirmationType === "edit" && coreDetails?.type === "edit") {
+      return (
+        <DiffViewer
+          diffContent={coreDetails.fileDiff}
+          filename={coreDetails.fileName}
+          maxHeight={15}
+          theme={theme}
+        />
+      );
+    }
+
+    if (confirmation.confirmationType === "exec" && coreDetails?.type === "exec") {
+      return (
+        <box flexDirection="column" style={{ gap: 0 }}>
+          <text fg={theme.colors.text.muted}>Command:</text>
+          <text fg={theme.colors.accent.warning ?? theme.colors.text.primary}>
+            {coreDetails.command}
+          </text>
+        </box>
+      );
+    }
+
+    // Fallback: show raw preview
+    const previewLines = confirmation.preview.split("\n").slice(0, 5);
+    return (
+      <box flexDirection="column" style={{ gap: 0 }}>
+        {previewLines.map((line, idx) => (
+          <text key={`preview-${idx}`} fg={theme.colors.text.tool}>
+            {line}
+          </text>
+        ))}
+      </box>
+    );
+  };
+
+  // Build options (skip "allow always" if not available)
+  const options = confirmation.canAllowAlways
+    ? APPROVAL_OPTIONS
+    : APPROVAL_OPTIONS.filter((o) => o.outcome !== "allow_always");
+
+  return (
+    <box flexDirection="column" style={{ gap: 0, marginTop: 1 }}>
+      <text fg={theme.colors.accent.warning ?? theme.colors.status.fg}>
+        <b>{confirmation.question}</b>
+      </text>
+      {renderPreview()}
+      <box flexDirection="column" style={{ gap: 0, marginTop: 1 }}>
+        {options.map((opt, idx) => (
+          <text
+            key={opt.outcome}
+            fg={idx === selectedIndex ? theme.colors.selection.fg : theme.colors.text.primary}
+            bg={idx === selectedIndex ? theme.colors.selection.bg : undefined}
+          >
+            {idx === selectedIndex ? "► " : "  "}{opt.label}
+          </text>
+        ))}
+      </box>
+      <text fg={theme.colors.text.muted} style={{ marginTop: 1 }}>
+        ↑/↓ to navigate, Enter to select, Esc to cancel
+      </text>
+    </box>
+  );
+}
+
 /**
  * Render a ToolCall entry with status, params, and output in a scrollable container
  */
-export function renderToolCall(tool: ToolCall, theme: ThemeDefinition): JSX.Element {
+export function renderToolCall(tool: ToolCall, theme: ThemeDefinition, pendingApproval?: PendingApprovalState): JSX.Element {
   const { symbol, color } = getStatusIndicator(tool.status, theme);
   const paramLines = formatParams(tool.params);
 
@@ -171,6 +293,9 @@ export function renderToolCall(tool: ToolCall, theme: ThemeDefinition): JSX.Elem
   // Output needs scrollbox if it exceeds max height
   const outputNeedsScroll = outputLines.length > TOOL_OUTPUT_MAX_HEIGHT;
 
+  // Check if this tool has pending approval
+  const isPendingApproval = pendingApproval?.callId === tool.callId && tool.confirmation !== undefined;
+
   return (
     <box
       key={tool.id}
@@ -186,7 +311,7 @@ export function renderToolCall(tool: ToolCall, theme: ThemeDefinition): JSX.Elem
         flexDirection: "column",
         gap: 0,
         borderStyle: "rounded",
-        borderColor,
+        borderColor: isPendingApproval ? (theme.colors.accent.warning ?? borderColor) : borderColor,
         backgroundColor: theme.colors.panel.bg,
         overflow: "hidden"
       }}
@@ -204,13 +329,13 @@ export function renderToolCall(tool: ToolCall, theme: ThemeDefinition): JSX.Elem
         </text>
       ))}
 
-      {/* Confirmation prompt if awaiting approval */}
-      {tool.confirmation && (
-        <box key={`${tool.id}-confirm`} flexDirection="column" style={{ gap: 0 }}>
-          <text fg={theme.colors.accent.warning ?? theme.colors.status.fg}>{tool.confirmation.question}</text>
-          <text fg={theme.colors.text.muted}>Preview: {tool.confirmation.preview.slice(0, 100)}</text>
-          <text fg={theme.colors.text.primary}>(Approval modal will appear)</text>
-        </box>
+      {/* Inline approval UI if this tool is pending approval */}
+      {isPendingApproval && (
+        renderInlineApproval({
+          tool,
+          theme,
+          selectedIndex: pendingApproval.selectedIndex,
+        })
       )}
 
       {/* Output (shown after execution) - in scrollbox if large */}
@@ -364,7 +489,7 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
               return renderChatMessage(entry, props.theme);
             }
             if (entry.kind === "toolcall") {
-              return renderToolCall(entry, props.theme);
+              return renderToolCall(entry, props.theme, props.pendingApproval);
             }
             // Legacy tool block
             return renderToolBlock(entry, props.theme);
@@ -375,11 +500,19 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
 }
 
 function InputArea(props: InputAreaProps): JSX.Element {
+  const isDisabled = props.disabled === true;
   const placeholderText = useMemo(() => {
-    const base = stringToStyledText("Type a thought, then submit with Enter");
+    const text = isDisabled
+      ? "Waiting for tool approval..."
+      : "Type a thought, then submit with Enter";
+    const base = stringToStyledText(text);
     const fg = parseColor(props.theme.colors.input.placeholder);
     return { ...base, chunks: base.chunks.map((chunk) => ({ ...chunk, fg })) };
-  }, [props.theme.colors.input.placeholder]);
+  }, [props.theme.colors.input.placeholder, isDisabled]);
+
+  // When disabled, dim the colors to show input is inactive
+  const inputFg = isDisabled ? props.theme.colors.text.muted : props.theme.colors.input.fg;
+  const inputBg = isDisabled ? props.theme.colors.panel.bg : props.theme.colors.input.bg;
 
   return (
     <box
@@ -400,7 +533,7 @@ function InputArea(props: InputAreaProps): JSX.Element {
     >
       <textarea
         ref={props.textareaRef}
-        focused
+        focused={!isDisabled}
         placeholder={placeholderText}
         keyBindings={TEXTAREA_KEY_BINDINGS}
         onSubmit={props.handleSubmit}
@@ -416,15 +549,15 @@ function InputArea(props: InputAreaProps): JSX.Element {
           paddingRight: 1,
           paddingTop: 0,
           paddingBottom: 0,
-          fg: props.theme.colors.input.fg,
-          bg: props.theme.colors.input.bg,
+          fg: inputFg,
+          bg: inputBg,
           borderColor: props.theme.colors.input.border,
           cursorColor: props.theme.colors.input.fg
         }}
-        textColor={props.theme.colors.input.fg}
-        focusedTextColor={props.theme.colors.input.fg}
-        backgroundColor={props.theme.colors.input.bg}
-        focusedBackgroundColor={props.theme.colors.input.bg}
+        textColor={inputFg}
+        focusedTextColor={inputFg}
+        backgroundColor={inputBg}
+        focusedBackgroundColor={inputBg}
       />
     </box>
   );
@@ -452,6 +585,7 @@ export function ChatLayout(props: ChatLayoutProps): JSX.Element {
         autoFollow={props.autoFollow}
         onScroll={props.onScroll}
         theme={props.theme}
+        pendingApproval={props.pendingApproval}
       />
       <InputArea
         textareaRef={props.textareaRef}
@@ -460,6 +594,7 @@ export function ChatLayout(props: ChatLayoutProps): JSX.Element {
         handleSubmit={props.handleSubmit}
         enforceInputLineBounds={props.enforceInputLineBounds}
         theme={props.theme}
+        disabled={props.inputDisabled}
       />
       <SuggestionPanel suggestions={props.suggestions} selectedIndex={props.selectedSuggestion} theme={props.theme} />
       <StatusBar

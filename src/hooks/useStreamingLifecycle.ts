@@ -4,6 +4,7 @@ import type { ConfigSession } from "../features/config/configSession";
 import type { ToolConfirmationEvent } from "../features/config";
 import type { ToolCall } from "./useChatStore";
 import { useStreamingResponder } from "./useStreamingResponder";
+import type { ScheduleFn } from "./useToolScheduler";
 
 interface UseStreamingLifecycleResult {
   streamRunId: RefObject<number>;
@@ -19,7 +20,8 @@ export function useStreamingLifecycle(
   appendToolCall: (callId: string, name: string, params: Record<string, unknown>) => string,
   updateToolCall: (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => void,
   setResponderWordCount: (count: number) => void,
-  setStreamState: (state: "idle" | "streaming") => void,
+  setStreamState: (state: "idle" | "busy") => void,
+  scheduleTools: ScheduleFn,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void
 ): UseStreamingLifecycleResult {
   const streamRunId = useRef(0);
@@ -36,6 +38,7 @@ export function useStreamingLifecycle(
     streamRunId,
     mountedRef,
     abortRef,
+    scheduleTools,
     onConfirmationNeeded
   );
 

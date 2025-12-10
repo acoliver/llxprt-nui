@@ -7,6 +7,7 @@ export type SessionStatus = "idle" | "initializing" | "ready" | "error";
 
 export interface UseSessionManagerReturn {
   session: ConfigSession | null;
+  sessionOptions: ConfigSessionOptions | null;
   status: SessionStatus;
   error: string | null;
   hasSession: boolean;
@@ -18,6 +19,7 @@ const logger = getLogger("nui:session-manager");
 
 export function useSessionManager(): UseSessionManagerReturn {
   const [session, setSession] = useState<ConfigSession | null>(null);
+  const [sessionOptions, setSessionOptions] = useState<ConfigSessionOptions | null>(null);
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<ConfigSession | null>(null);
@@ -29,6 +31,7 @@ export function useSessionManager(): UseSessionManagerReturn {
       sessionRef.current = null;
     }
     setSession(null);
+    setSessionOptions(null);
     setStatus("idle");
     setError(null);
   }, []);
@@ -53,6 +56,7 @@ export function useSessionManager(): UseSessionManagerReturn {
 
         sessionRef.current = newSession;
         setSession(newSession);
+        setSessionOptions(options);
         setStatus("ready");
 
         const registry = newSession.config.getToolRegistry();
@@ -80,6 +84,7 @@ export function useSessionManager(): UseSessionManagerReturn {
 
   return {
     session,
+    sessionOptions,
     status,
     error,
     hasSession: session !== null && status === "ready",

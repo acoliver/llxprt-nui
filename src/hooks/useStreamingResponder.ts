@@ -2,12 +2,13 @@ import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
 import type { Role, StreamState, ToolCall } from "./useChatStore";
 import type { ConfigSession } from "../features/config/configSession";
-import type { AdapterEvent, ToolPendingEvent, ToolConfirmationEvent } from "../features/config";
+import type { AdapterEvent, ToolConfirmationEvent } from "../features/config";
 import { sendMessageWithSession } from "../features/config";
-import {
-  executeToolCall,
-  type ToolCallRequestInfo,
-} from "@vybestack/llxprt-code-core";
+import type { ToolCallRequestInfo, CompletedToolCall } from "@vybestack/llxprt-code-core";
+import type { ScheduleFn } from "./useToolScheduler";
+import { getLogger } from "../lib/logger";
+
+const logger = getLogger("nui:streaming-responder");
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
@@ -20,8 +21,6 @@ interface StreamContext {
   thinkingMessageId: string | null;
   /** Track tool calls by their backend callId */
   toolCalls: Map<string, string>;
-  /** Collect pending tool requests to execute after streaming */
-  pendingToolRequests: ToolPendingEvent[];
 }
 
 function countWords(text: string): number {
@@ -39,6 +38,8 @@ function handleAdapterEvent(
   appendToolCall: (callId: string, name: string, params: Record<string, unknown>) => string,
   updateToolCall: (callId: string, update: ToolCallUpdate) => void,
   setResponderWordCount: StateSetter<number>,
+  scheduleTools: ScheduleFn,
+  signal: AbortSignal,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void
 ): StreamContext {
   if (event.type === "text_delta") {
@@ -72,14 +73,23 @@ function handleAdapterEvent(
     return context;
   }
   if (event.type === "tool_pending") {
-    // Create a new ToolCall entry
+    // Create a new ToolCall entry in UI
     const entryId = appendToolCall(event.id, event.name, event.params);
     const newToolCalls = new Map(context.toolCalls);
     newToolCalls.set(event.id, entryId);
-    // Collect the tool request for later execution
-    const newPendingToolRequests = [...context.pendingToolRequests, event];
+
+    // Schedule the tool call via the scheduler (handles confirmation flow)
+    const request: ToolCallRequestInfo = {
+      callId: event.id,
+      name: event.name,
+      args: event.params,
+      isClientInitiated: false,
+      prompt_id: `nui-${Date.now()}`,
+    };
+    scheduleTools(request, signal);
+
     // Reset message IDs since model output may continue after tool
-    return { modelMessageId: null, thinkingMessageId: null, toolCalls: newToolCalls, pendingToolRequests: newPendingToolRequests };
+    return { modelMessageId: null, thinkingMessageId: null, toolCalls: newToolCalls };
   }
   if (event.type === "tool_result") {
     // Update existing tool call with result
@@ -122,68 +132,13 @@ function handleAdapterEvent(
 export type UseStreamingResponderFunction = (prompt: string, session: ConfigSession | null) => Promise<void>;
 
 /**
- * Execute pending tool calls and return their response parts.
- * Updates tool status as each tool executes.
+ * Callback to handle completed tools - sends responses back to the model
  */
-async function executeToolsAndGetResponses(
+export type OnToolsCompleteCallback = (
   session: ConfigSession,
-  pendingTools: ToolPendingEvent[],
-  updateToolCall: (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => void,
+  completedTools: CompletedToolCall[],
   signal: AbortSignal
-): Promise<unknown[]> {
-  const responseParts: unknown[] = [];
-  const config = session.config;
-
-  for (const tool of pendingTools) {
-    if (signal.aborted) break;
-
-    // Mark as executing
-    updateToolCall(tool.id, { status: "executing" });
-
-    const request: ToolCallRequestInfo = {
-      callId: tool.id,
-      name: tool.name,
-      args: tool.params,
-      isClientInitiated: false,
-      prompt_id: `nui-${Date.now()}`,
-    };
-
-    try {
-      const response = await executeToolCall(config, request, signal);
-
-      // Update tool with result
-      if (response.error) {
-        updateToolCall(tool.id, {
-          status: "error",
-          errorMessage: response.error.message,
-          output: response.resultDisplay as string | undefined
-        });
-      } else {
-        let output: string | undefined;
-        if (response.resultDisplay != null) {
-          output = typeof response.resultDisplay === "string"
-            ? response.resultDisplay
-            : JSON.stringify(response.resultDisplay);
-        }
-        updateToolCall(tool.id, {
-          status: "complete",
-          output
-        });
-      }
-
-      // Collect response parts
-      responseParts.push(...response.responseParts);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      updateToolCall(tool.id, {
-        status: "error",
-        errorMessage: message
-      });
-    }
-  }
-
-  return responseParts;
-}
+) => Promise<void>;
 
 export function useStreamingResponder(
   appendMessage: (role: Role, text: string) => string,
@@ -195,6 +150,7 @@ export function useStreamingResponder(
   streamRunId: RefHandle<number>,
   mountedRef: RefHandle<boolean>,
   abortRef: RefHandle<AbortController | null>,
+  scheduleTools: ScheduleFn,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void
 ): UseStreamingResponderFunction {
   return useCallback(
@@ -216,76 +172,166 @@ export function useStreamingResponder(
       }
       const controller = new AbortController();
       abortRef.current = controller;
-      setStreamState("streaming");
+      setStreamState("busy");
 
       let context: StreamContext = {
         modelMessageId: null,
         thinkingMessageId: null,
         toolCalls: new Map(),
-        pendingToolRequests: []
       };
 
+      let hasScheduledTools = false;
+
       try {
-        // Initial streaming loop
+        // Stream messages from the model
         for await (const event of sendMessageWithSession(session, prompt, controller.signal)) {
           if (!mountedRef.current || streamRunId.current !== currentRun) {
             break;
           }
-          context = handleAdapterEvent(event, context, appendMessage, appendToMessage, appendToolCall, updateToolCall, setResponderWordCount, onConfirmationNeeded);
-        }
-
-        // Agentic loop: execute tools and continue conversation
-        while (
-          context.pendingToolRequests.length > 0 &&
-          mountedRef.current &&
-          streamRunId.current === currentRun &&
-          !controller.signal.aborted
-        ) {
-          // Execute pending tools
-          const responseParts = await executeToolsAndGetResponses(
-            session,
-            context.pendingToolRequests,
-            updateToolCall,
-            controller.signal
-          );
-
-          // Reset context for next round
-          context = {
-            modelMessageId: null,
-            thinkingMessageId: null,
-            toolCalls: new Map(),
-            pendingToolRequests: []
-          };
-
-          // Send tool responses back to model and continue streaming
-          const client = session.getClient();
-          const promptId = `nui-continuation-${Date.now()}`;
-          const stream = client.sendMessageStream(responseParts, controller.signal, promptId);
-
-          for await (const coreEvent of stream) {
-            if (streamRunId.current !== currentRun) {
-              break;
-            }
-            // Transform and handle the event
-            const { transformEvent } = await import("../features/config/llxprtAdapter");
-            const event = transformEvent(coreEvent);
-            context = handleAdapterEvent(event, context, appendMessage, appendToMessage, appendToolCall, updateToolCall, setResponderWordCount, onConfirmationNeeded);
+          // Track if any tools were scheduled
+          if (event.type === "tool_pending") {
+            hasScheduledTools = true;
           }
+          context = handleAdapterEvent(
+            event,
+            context,
+            appendMessage,
+            appendToMessage,
+            appendToolCall,
+            updateToolCall,
+            setResponderWordCount,
+            scheduleTools,
+            controller.signal,
+            onConfirmationNeeded
+          );
         }
+        // Tool execution is handled by the scheduler via callbacks
+        // The scheduler will call onAllToolCallsComplete when tools finish
+        // If tools were scheduled, DON'T set idle here - let the tool completion callback do it
       } catch (error) {
         if (!controller.signal.aborted) {
           const message = error instanceof Error ? error.message : String(error);
           appendMessage("system", `Error: ${message}`);
         }
       } finally {
-        if (mountedRef.current && streamRunId.current === currentRun) {
+        // Only set idle if no tools were scheduled (tools will set idle when complete)
+        // Also set idle if aborted or component unmounted
+        const wasAborted = controller.signal.aborted;
+        const isCurrent = streamRunId.current === currentRun;
+
+        if (mountedRef.current && isCurrent && (wasAborted || !hasScheduledTools)) {
           setStreamState("idle");
         }
-        if (abortRef.current === controller) {
+        // Only clear abortRef if no tools were scheduled
+        // If tools are scheduled, we need to keep the controller for continuation
+        if (abortRef.current === controller && !hasScheduledTools) {
           abortRef.current = null;
         }
       }
     },
-    [appendMessage, appendToMessage, appendToolCall, updateToolCall, abortRef, mountedRef, setResponderWordCount, setStreamState, streamRunId, onConfirmationNeeded]
+    [appendMessage, appendToMessage, appendToolCall, updateToolCall, abortRef, mountedRef, setResponderWordCount, setStreamState, streamRunId, scheduleTools, onConfirmationNeeded]
   );
+}
+
+/**
+ * Continue streaming after tools complete - sends tool responses to model
+ * Returns true if new tools were scheduled, false if conversation turn is complete
+ */
+export async function continueStreamingAfterTools(
+  session: ConfigSession,
+  completedTools: CompletedToolCall[],
+  signal: AbortSignal,
+  appendMessage: (role: Role, text: string) => string,
+  appendToMessage: (id: string, text: string) => void,
+  appendToolCall: (callId: string, name: string, params: Record<string, unknown>) => string,
+  updateToolCall: (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => void,
+  setResponderWordCount: StateSetter<number>,
+  scheduleTools: ScheduleFn,
+  setStreamState: StateSetter<StreamState>,
+  onConfirmationNeeded?: (event: ToolConfirmationEvent) => void
+): Promise<boolean> {
+  logger.debug("continueStreamingAfterTools called", "toolCount:", completedTools.length);
+
+  // Collect all response parts from completed tools
+  const responseParts = completedTools.flatMap((tool) => tool.response.responseParts);
+
+  logger.debug("continueStreamingAfterTools: collected response parts", "count:", responseParts.length);
+
+  if (responseParts.length === 0) {
+    // No response parts to send - this might happen if all tools had validation errors
+    // Check if there were any errors we should report
+    const errors = completedTools
+      .filter((tool) => tool.response.error)
+      .map((tool) => tool.response.error?.message);
+
+    logger.debug("continueStreamingAfterTools: no response parts", "errorCount:", errors.length);
+
+    if (errors.length > 0) {
+      // Append error messages to chat so user can see what went wrong
+      for (const error of errors) {
+        if (error) {
+          appendMessage("system", `Tool error: ${error}`);
+        }
+      }
+    }
+
+    setStreamState("idle");
+    return false;
+  }
+
+  // Send tool responses back to model
+  const client = session.getClient();
+  const promptId = `nui-continuation-${Date.now()}`;
+  const stream = client.sendMessageStream(responseParts, signal, promptId);
+
+  let context: StreamContext = {
+    modelMessageId: null,
+    thinkingMessageId: null,
+    toolCalls: new Map(),
+  };
+
+  let hasScheduledTools = false;
+
+  try {
+    for await (const coreEvent of stream) {
+      if (signal.aborted) {
+        break;
+      }
+      // Transform and handle the event
+      const { transformEvent } = await import("../features/config/llxprtAdapter");
+      const event = transformEvent(coreEvent);
+
+      // Track if any tools were scheduled during continuation
+      if (event.type === "tool_pending") {
+        hasScheduledTools = true;
+      }
+
+      context = handleAdapterEvent(
+        event,
+        context,
+        appendMessage,
+        appendToMessage,
+        appendToolCall,
+        updateToolCall,
+        setResponderWordCount,
+        scheduleTools,
+        signal,
+        onConfirmationNeeded
+      );
+    }
+  } catch (error) {
+    // Handle errors during continuation streaming
+    if (!signal.aborted) {
+      const message = error instanceof Error ? error.message : String(error);
+      appendMessage("system", `Continuation error: ${message}`);
+    }
+  } finally {
+    // Only set idle if no new tools were scheduled and not aborted
+    // If tools were scheduled, the scheduler will handle setting idle when they complete
+    if (!hasScheduledTools && !signal.aborted) {
+      setStreamState("idle");
+    }
+  }
+
+  return hasScheduledTools;
 }

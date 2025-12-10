@@ -46,12 +46,14 @@ describe("useToolApproval", () => {
       const mockResult: UseToolApprovalResult = {
         pendingApproval: null,
         queueApproval: () => {},
+        queueApprovalFromScheduler: () => {},
         handleDecision: () => {},
         clearApproval: () => {}
       };
 
       expect(mockResult.pendingApproval).toBeNull();
       expect(typeof mockResult.queueApproval).toBe("function");
+      expect(typeof mockResult.queueApprovalFromScheduler).toBe("function");
       expect(typeof mockResult.handleDecision).toBe("function");
       expect(typeof mockResult.clearApproval).toBe("function");
     });
@@ -71,6 +73,7 @@ describe("useToolApproval", () => {
       const mockResult: UseToolApprovalResult = {
         pendingApproval: approval,
         queueApproval: () => {},
+        queueApprovalFromScheduler: () => {},
         handleDecision: () => {},
         clearApproval: () => {}
       };
@@ -87,6 +90,7 @@ describe("useToolApproval", () => {
         queueApproval: (approval: PendingApproval) => {
           queuedApproval = approval;
         },
+        queueApprovalFromScheduler: () => {},
         handleDecision: () => {},
         clearApproval: () => {}
       };
@@ -114,6 +118,7 @@ describe("useToolApproval", () => {
       const mockResult: UseToolApprovalResult = {
         pendingApproval: null,
         queueApproval: () => {},
+        queueApprovalFromScheduler: () => {},
         handleDecision: (callId: string, outcome) => {
           receivedCallId = callId;
           receivedOutcome = outcome;

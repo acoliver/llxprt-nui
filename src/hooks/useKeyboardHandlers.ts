@@ -2,6 +2,9 @@ import type { KeyEvent, TextareaRenderable } from "@opentui/core";
 import type { RefObject } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useCallback, useEffect, useRef } from "react";
+import { getLogger } from "../lib/logger";
+
+const logger = getLogger("nui:keyboard");
 
 function isEnterKey(key: KeyEvent): boolean {
   // Don't match linefeed (\n / shift+enter) - let textarea handle it as newline
@@ -38,11 +41,24 @@ export function useSuggestionKeybindings(
   suggestionCount: number,
   moveSelection: (delta: number) => void,
   handleTabComplete: () => void,
-  cancelStreaming: () => void,
+  cancelAll: () => void,
   clearInput: () => Promise<void>,
-  isStreaming: () => boolean
+  isBusy: () => boolean,
+  isInputEmpty: () => boolean
 ): void {
   const hasSuggestions = suggestionCount > 0;
+
+  // Use refs to avoid stale closures
+  const cancelAllRef = useRef(cancelAll);
+  const clearInputRef = useRef(clearInput);
+  const isBusyRef = useRef(isBusy);
+  const isInputEmptyRef = useRef(isInputEmpty);
+
+  useEffect(() => { cancelAllRef.current = cancelAll; }, [cancelAll]);
+  useEffect(() => { clearInputRef.current = clearInput; }, [clearInput]);
+  useEffect(() => { isBusyRef.current = isBusy; }, [isBusy]);
+  useEffect(() => { isInputEmptyRef.current = isInputEmpty; }, [isInputEmpty]);
+
   useKeyboard((key) => {
     if (hasSuggestions && key.name === "down") {
       key.preventDefault();
@@ -54,10 +70,18 @@ export function useSuggestionKeybindings(
       key.preventDefault();
       handleTabComplete();
     } else if (key.name === "escape") {
-      if (isStreaming()) {
-        cancelStreaming();
-      } else {
-        void clearInput();
+      const empty = isInputEmptyRef.current();
+      const busy = isBusyRef.current();
+      logger.debug("Escape pressed", "inputEmpty:", empty, "busy:", busy);
+
+      // First Esc clears input if it has text
+      // Second Esc (or first if input empty) cancels streaming/tools
+      if (!empty) {
+        logger.debug("Clearing input");
+        void clearInputRef.current();
+      } else if (busy) {
+        logger.debug("Cancelling all");
+        cancelAllRef.current();
       }
     }
   });
