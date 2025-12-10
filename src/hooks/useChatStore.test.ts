@@ -84,4 +84,29 @@ describe("useChatStore message handling", () => {
     expect(typeof messageId!).toBe("string");
     expect(result.current.entries[0].id).toBe(messageId!);
   });
+
+  it("should clear all entries and reset counts", () => {
+    const { result } = renderHook(() => useChatStore(makeId));
+
+    // Add some entries and update counts
+    act(() => {
+      result.current.appendMessage("user", "First message");
+      result.current.appendMessage("model", "Response");
+      result.current.setPromptCount(5);
+      result.current.setResponderWordCount(100);
+    });
+
+    expect(result.current.entries).toHaveLength(2);
+    expect(result.current.promptCount).toBe(5);
+    expect(result.current.responderWordCount).toBe(100);
+
+    // Clear everything
+    act(() => {
+      result.current.clearEntries();
+    });
+
+    expect(result.current.entries).toHaveLength(0);
+    expect(result.current.promptCount).toBe(0);
+    expect(result.current.responderWordCount).toBe(0);
+  });
 });

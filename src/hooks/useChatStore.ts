@@ -68,6 +68,7 @@ export interface UseChatStoreReturn {
   appendToolCall: (callId: string, name: string, params: Record<string, unknown>) => string;
   updateToolCall: (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => void;
   findToolCallByCallId: (callId: string) => ToolCall | undefined;
+  clearEntries: () => void;
   promptCount: number;
   setPromptCount: StateSetter<number>;
   responderWordCount: number;
@@ -190,6 +191,12 @@ export function useChatStore(makeId: () => string): UseChatStoreReturn {
     []
   );
 
+  const clearEntries = useCallback(() => {
+    setEntries([]);
+    setPromptCount(0);
+    setResponderWordCount(0);
+  }, []);
+
   return {
     entries,
     appendMessage,
@@ -198,6 +205,7 @@ export function useChatStore(makeId: () => string): UseChatStoreReturn {
     appendToolCall,
     updateToolCall,
     findToolCallByCallId,
+    clearEntries,
     promptCount,
     setPromptCount,
     responderWordCount,

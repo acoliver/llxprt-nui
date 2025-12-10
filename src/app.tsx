@@ -83,10 +83,10 @@ function AppInner(): JSX.Element {
   // Generate stable session ID for history (once per app instance)
   const historySessionIdRef = useRef(`nui-${Date.now()}`);
 
-  // Initialize persistent history when session is ready
+  // Initialize persistent history immediately using cwd, so history is available before profile load
   const { service: persistentHistory } = usePersistentHistory({
-    workingDir: sessionOptions?.workingDir ?? null,
-    sessionId: session ? historySessionIdRef.current : null,
+    workingDir: sessionOptions?.workingDir ?? process.cwd(),
+    sessionId: historySessionIdRef.current,
   });
 
   const dialog = useDialog();
@@ -94,7 +94,7 @@ function AppInner(): JSX.Element {
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } = useCompletionManager(textareaRef);
   const { record: recordHistory, handleHistoryKey } = usePromptHistory(textareaRef, { persistentHistory });
   const makeLineId = useLineIdGenerator();
-  const { entries, appendMessage, appendToMessage, appendToolCall, updateToolCall, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } = useChatStore(makeLineId);
+  const { entries, appendMessage, appendToMessage, appendToolCall, updateToolCall, clearEntries, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } = useChatStore(makeLineId);
 
   // Create a ref for queueApprovalFromScheduler to break circular dependency
   const queueApprovalFromSchedulerRef = useRef<(
@@ -272,8 +272,23 @@ function AppInner(): JSX.Element {
       applyTheme(parts.slice(1).join(" "));
       return true;
     }
+    if (command === "/clear") {
+      // Reset the model's conversation history if session exists
+      if (session) {
+        try {
+          await session.getClient().resetChat();
+        } catch (error) {
+          logger.error("Failed to reset chat:", error);
+        }
+      }
+      // Clear the UI entries and reset counts
+      clearEntries();
+      // Clear the terminal screen
+      console.clear();
+      return true;
+    }
     return triggerCommand(command);
-  }, [applyTheme, handleConfigCommand, triggerCommand]);
+  }, [applyTheme, handleConfigCommand, triggerCommand, session, clearEntries]);
 
   const { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete } = useInputManager(textareaRef, appendMessage, setPromptCount, setAutoFollow, (prompt) => {
     if (!session) {
