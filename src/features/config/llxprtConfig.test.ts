@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import * as os from "node:os";
 import * as path from "node:path";
-import { applyConfigCommand, validateSessionConfig } from "./llxprtConfig";
+import { applyConfigCommand, validateSessionConfig, profileToConfigOptions } from "./llxprtConfig";
 import type { SessionConfig } from "./llxprtAdapter";
+import type { ProfileData } from "./llxprtConfig";
 
 const BASE_CONFIG: SessionConfig = { provider: "openai" };
 
@@ -131,3 +132,99 @@ class FakeProfileManager {
     return Promise.resolve(Object.keys(this.profiles));
   }
 }
+
+describe("profileToConfigOptions", () => {
+  it("should convert ProfileData to ConfigSessionOptions", () => {
+    const profile: ProfileData = {
+      provider: "openai",
+      model: "gpt-4",
+      baseUrl: "https://api.example.com",
+      authKeyfile: "/path/to/key",
+      ephemeralSettings: { streaming: "disabled" },
+    };
+
+    const options = profileToConfigOptions(profile, "/work/dir");
+
+    expect(options.model).toBe("gpt-4");
+    expect(options.provider).toBe("openai");
+    expect(options.baseUrl).toBe("https://api.example.com");
+    expect(options.authKeyfile).toBe("/path/to/key");
+    expect(options.workingDir).toBe("/work/dir");
+  });
+
+  it("should handle ephemeral settings override for baseUrl", () => {
+    const profile: ProfileData = {
+      provider: "openai",
+      model: "gpt-4",
+      baseUrl: "https://default.api.com",
+      ephemeralSettings: { "base-url": "https://override.api.com" },
+    };
+
+    const options = profileToConfigOptions(profile, "/work");
+
+    expect(options.baseUrl).toBe("https://override.api.com");
+  });
+
+  it("should handle ephemeral settings override for model", () => {
+    const profile: ProfileData = {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      ephemeralSettings: { model: "gemini-2.5-pro" },
+    };
+
+    const options = profileToConfigOptions(profile, "/work");
+
+    expect(options.model).toBe("gemini-2.5-pro");
+  });
+
+  it("should handle ephemeral settings override for authKeyfile", () => {
+    const profile: ProfileData = {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      authKeyfile: "/default/key",
+      ephemeralSettings: { "auth-keyfile": "/override/key" },
+    };
+
+    const options = profileToConfigOptions(profile, "/work");
+
+    expect(options.authKeyfile).toBe("/override/key");
+  });
+
+  it("should handle missing optional fields", () => {
+    const profile: ProfileData = {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+    };
+
+    const options = profileToConfigOptions(profile, "/work");
+
+    expect(options.model).toBe("gemini-2.5-flash");
+    expect(options.provider).toBe("gemini");
+    expect(options.baseUrl).toBeUndefined();
+    expect(options.authKeyfile).toBeUndefined();
+  });
+
+  it("should handle apiKey from ephemeral settings", () => {
+    const profile: ProfileData = {
+      provider: "openai",
+      model: "gpt-4",
+      ephemeralSettings: { "auth-key": "sk-test-key-12345" },
+    };
+
+    const options = profileToConfigOptions(profile, "/work");
+
+    expect(options.apiKey).toBe("sk-test-key-12345");
+  });
+
+  it("should use authKeyfile from profile when not in ephemeral settings", () => {
+    const profile: ProfileData = {
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      authKeyfile: "/profile/key",
+    };
+
+    const options = profileToConfigOptions(profile, "/work");
+
+    expect(options.authKeyfile).toBe("/profile/key");
+  });
+});

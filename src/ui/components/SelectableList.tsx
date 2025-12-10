@@ -17,7 +17,10 @@ export function SelectableListItem(props: SelectableListItemProps): JSX.Element 
   const finalText = props.width != null ? labelText.padEnd(props.width, " ") : labelText;
 
   return (
-    <text fg={props.isSelected ? props.theme?.colors.accent.primary : props.theme?.colors.text.primary}>
+    <text 
+      fg={props.isSelected ? props.theme?.colors.accent.primary : props.theme?.colors.text.primary}
+      style={{ paddingLeft: 1, paddingRight: 1 }}
+    >
       {finalText}
     </text>
   );

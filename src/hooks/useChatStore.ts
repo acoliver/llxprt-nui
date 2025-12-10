@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useState } from "react";
 import type { MessageRole } from "../ui/components/messages";
+import type { ToolStatus, ToolConfirmationType } from "../types/events";
 
 type Role = MessageRole;
 type StreamState = "idle" | "streaming";
@@ -12,7 +13,7 @@ interface ChatMessage {
   text: string;
 }
 
-interface ToolBlock {
+interface ToolBlockLegacy {
   id: string;
   kind: "tool";
   lines: string[];
@@ -22,17 +23,43 @@ interface ToolBlock {
   streaming?: boolean;
 }
 
+interface ToolCall {
+  id: string;
+  kind: "toolcall";
+  /** The tool call ID from the backend */
+  callId: string;
+  name: string;
+  params: Record<string, unknown>;
+  status: ToolStatus;
+  /** Tool output after execution */
+  output?: string;
+  /** Error message if failed */
+  errorMessage?: string;
+  /** Confirmation details if awaiting approval */
+  confirmation?: {
+    confirmationType: ToolConfirmationType;
+    question: string;
+    preview: string;
+    canAllowAlways: boolean;
+  };
+}
+
+type ToolBlock = ToolBlockLegacy | ToolCall;
+
 type ChatEntry = ChatMessage | ToolBlock;
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 
-export type { Role, StreamState, ChatMessage, ToolBlock, ChatEntry, StateSetter };
+export type { Role, StreamState, ChatMessage, ToolBlock, ToolBlockLegacy, ToolCall, ChatEntry, StateSetter };
 
 export interface UseChatStoreReturn {
   entries: ChatEntry[];
   appendMessage: (role: Role, text: string) => string;
   appendToMessage: (id: string, text: string) => void;
   appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string;
+  appendToolCall: (callId: string, name: string, params: Record<string, unknown>) => string;
+  updateToolCall: (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => void;
+  findToolCallByCallId: (callId: string) => ToolCall | undefined;
   promptCount: number;
   setPromptCount: StateSetter<number>;
   responderWordCount: number;
@@ -99,11 +126,53 @@ export function useChatStore(makeId: () => string): UseChatStoreReturn {
     [makeId]
   );
 
+  const appendToolCall = useCallback(
+    (callId: string, name: string, params: Record<string, unknown>): string => {
+      const id = makeId();
+      setEntries((prev) => [
+        ...prev,
+        {
+          id,
+          kind: "toolcall",
+          callId,
+          name,
+          params,
+          status: "pending" as const
+        }
+      ]);
+      return id;
+    },
+    [makeId]
+  );
+
+  const updateToolCall = useCallback(
+    (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => {
+      setEntries((prev) =>
+        prev.map((item) => {
+          if (item.kind !== "toolcall" || item.callId !== callId) {
+            return item;
+          }
+          return { ...item, ...update };
+        })
+      );
+    },
+    []
+  );
+
+  const findToolCallByCallId = useCallback(
+    (callId: string): ToolCall | undefined => {
+      return entries.find(
+        (entry): entry is ToolCall => entry.kind === "toolcall" && entry.callId === callId
+      );
+    },
+    [entries]
+  );
+
   const updateToolBlock = useCallback(
     (id: string, mutate: (block: ToolBlock) => ToolBlock) => {
       setEntries((prev) =>
         prev.map((item) => {
-          if (item.kind !== "tool" || item.id !== id) {
+          if ((item.kind !== "tool" && item.kind !== "toolcall") || item.id !== id) {
             return item;
           }
           return mutate(item);
@@ -118,6 +187,9 @@ export function useChatStore(makeId: () => string): UseChatStoreReturn {
     appendMessage,
     appendToMessage,
     appendToolBlock,
+    appendToolCall,
+    updateToolCall,
+    findToolCallByCallId,
     promptCount,
     setPromptCount,
     responderWordCount,

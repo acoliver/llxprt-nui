@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import type { SessionConfig } from "../features/config";
+import type { ConfigSessionOptions } from "../features/config/configSession";
 import { listModels, listProviders } from "../features/config";
-import { applyConfigCommand, validateSessionConfig } from "../features/config";
+import { applyProfileWithSession, validateSessionConfig } from "../features/config";
 import { findTheme, type ThemeDefinition } from "../features/theme";
 
 interface ItemFetchResult {
@@ -21,6 +22,7 @@ interface UseAppCommandsProps {
   themes: ThemeDefinition[];
   setThemeBySlug: (slug: string) => void;
   appendMessage: (role: "user" | "model" | "system", text: string) => string;
+  createSession: (options: ConfigSessionOptions) => Promise<void>;
 }
 
 interface UseAppCommandsResult {
@@ -36,6 +38,7 @@ export function useAppCommands({
   themes,
   setThemeBySlug,
   appendMessage,
+  createSession,
 }: UseAppCommandsProps): UseAppCommandsResult {
   const fetchModelItems = useCallback(async (): Promise<ItemFetchResult> => {
     const missing = validateSessionConfig(sessionConfig, { requireModel: false });
@@ -78,16 +81,30 @@ export function useAppCommands({
 
   const handleConfigCommand = useCallback(
     async (command: string): Promise<ConfigCommandResult> => {
-      const configResult = await applyConfigCommand(command, sessionConfig);
+      const configResult = await applyProfileWithSession(command, sessionConfig, {
+        workingDir: process.cwd(),
+      });
       if (configResult.handled) {
         setSessionConfig(configResult.nextConfig);
-        if (configResult.messages.length > 0) {
-          appendMessage("system", configResult.messages.join("\n"));
+        for (const msg of configResult.messages) {
+          appendMessage("system", msg);
+        }
+
+        // If profile was loaded successfully, create the session
+        if (configResult.sessionOptions) {
+          try {
+            appendMessage("system", "Initializing session...");
+            await createSession(configResult.sessionOptions);
+            appendMessage("system", "Session ready. You can now chat.");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            appendMessage("system", `Failed to initialize session: ${message}`);
+          }
         }
       }
       return configResult;
     },
-    [appendMessage, sessionConfig, setSessionConfig]
+    [appendMessage, sessionConfig, setSessionConfig, createSession]
   );
 
   return { fetchModelItems, fetchProviderItems, applyTheme, handleConfigCommand };

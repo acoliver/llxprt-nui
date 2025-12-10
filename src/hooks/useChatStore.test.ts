@@ -69,9 +69,7 @@ describe("useChatStore message handling", () => {
     expect(result.current.entries).toHaveLength(1);
     const message = result.current.entries[0];
     expect(message.kind).toBe("message");
-    if (message.kind === "message") {
-      expect(message.text).toBe("First line\nSecond line");
-    }
+    expect((message as { text: string }).text).toBe("First line\nSecond line");
   });
 
   it("should return the message id from appendMessage", () => {

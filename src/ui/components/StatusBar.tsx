@@ -25,13 +25,17 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         maxHeight: 3,
         paddingLeft: 1,
         paddingRight: 1,
+        paddingTop: 0,
+        paddingBottom: 1,
         flexDirection: "row",
         justifyContent: "space-between",
-        backgroundColor: props.theme.colors.panel.bg
+        backgroundColor: props.theme.colors.panel.bg,
+        borderTop: true,
+        borderTopColor: props.theme.colors.panel.border
       }}
     >
-      <text fg={props.theme.colors.text.primary}>{props.statusLabel}</text>
-      <text fg={props.theme.colors.text.primary}>
+      <text fg={props.theme.colors.status.fg}>{props.statusLabel}</text>
+      <text fg={props.theme.colors.status.fg}>
         {`prompts: ${props.promptCount} | words: ${props.responderWordCount} | ${props.streamState}`}
       </text>
     </box>

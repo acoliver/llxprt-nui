@@ -1,17 +1,15 @@
-import { readFileSync } from "node:fs";
-import * as llxprtCore from "@vybestack/llxprt-code-core";
 import {
-  Config,
-  ContentBlockGuards,
-  ContentFactory,
-  type ContentBlock,
-  type IContent,
-  type IProvider,
-  SettingsService
+  GeminiEventType,
+  type ServerGeminiStreamEvent,
+  type ToolCallResponseInfo,
+  type ServerToolCallConfirmationDetails,
 } from "@vybestack/llxprt-code-core";
-import { AnthropicProvider } from "@vybestack/llxprt-code-core";
-import { GeminiProvider } from "@vybestack/llxprt-code-core";
-import { OpenAIProvider } from "@vybestack/llxprt-code-core";
+import { getLogger } from "../../lib/logger";
+import type { AdapterEvent, ToolConfirmationType } from "../../types/events";
+import type { ConfigSession } from "./configSession";
+import { createConfigSession } from "./configSession";
+
+export type { AdapterEvent, ToolPendingEvent, ToolConfirmationEvent } from "../../types/events";
 
 export type ProviderKey = "openai" | "gemini" | "anthropic";
 
@@ -31,31 +29,161 @@ export interface SessionConfig {
   readonly apiKey?: string;
   readonly keyFilePath?: string;
   readonly baseUrl?: string;
+  readonly ephemeralSettings?: Record<string, unknown>;
 }
 
-export type AdapterEvent =
-  | { readonly type: "text"; readonly lines: string[] }
-  | { readonly type: "thinking"; readonly lines: string[] }
-  | { readonly type: "tool"; readonly header: string; readonly lines: string[] };
+const logger = getLogger("nui:llxprt-adapter");
 
-const maybeCreateProviderRuntimeContext = (llxprtCore as {
-  createProviderRuntimeContext?: (options: {
-    settingsService: SettingsService;
-    config: Config;
-    runtimeId?: string;
-    metadata?: Record<string, unknown>;
-  }) => unknown;
-}).createProviderRuntimeContext;
+/**
+ * Extract display output from a tool result
+ */
+function getToolResultOutput(info: ToolCallResponseInfo): string {
+  if (info.error) {
+    return info.error.message;
+  }
+  if (info.resultDisplay === undefined) {
+    return "(no output)";
+  }
+  if (typeof info.resultDisplay === "string") {
+    return info.resultDisplay;
+  }
+  // FileDiff object - format as diff
+  const diff = info.resultDisplay;
+  return `File: ${diff.filePath}\n${diff.diff}`;
+}
 
-const maybeSetActiveProviderRuntimeContext = (llxprtCore as {
-  setActiveProviderRuntimeContext?: (context: unknown) => void;
-}).setActiveProviderRuntimeContext;
+/**
+ * Map confirmation details type to our simplified type
+ */
+function getConfirmationType(details: ServerToolCallConfirmationDetails): ToolConfirmationType {
+  const type = details.details.type as string;
+  if (type === "edit") return "edit";
+  if (type === "exec") return "exec";
+  if (type === "mcp") return "mcp";
+  if (type === "info") return "info";
+  return "exec"; // fallback for unknown types
+}
 
-const maybeGetSettingsService = (llxprtCore as {
-  getSettingsService?: () => SettingsService;
-}).getSettingsService;
+/**
+ * Get the preview content for a confirmation dialog
+ */
+function getConfirmationPreview(details: ServerToolCallConfirmationDetails): string {
+  const d = details.details;
+  const type = d.type as string;
+  if (type === "edit" && "fileDiff" in d) {
+    return d.fileDiff || `Edit: ${d.filePath}`;
+  }
+  if (type === "exec" && "command" in d) {
+    return d.command;
+  }
+  if (type === "mcp" && "toolDisplayName" in d) {
+    return `MCP Tool: ${d.toolDisplayName} (server: ${d.serverName})`;
+  }
+  if (type === "info" && "prompt" in d) {
+    const urls = "urls" in d && Array.isArray(d.urls) && d.urls.length > 0 ? `\nURLs: ${d.urls.join(", ")}` : "";
+    return d.prompt + urls;
+  }
+  return "";
+}
 
-const maybeResetSettingsService = (llxprtCore as { resetSettingsService?: () => void }).resetSettingsService;
+/**
+ * Get the question text for a confirmation dialog
+ */
+function getConfirmationQuestion(details: ServerToolCallConfirmationDetails): string {
+  const d = details.details;
+  const type = d.type as string;
+  if (type === "edit") {
+    return "Apply this change?";
+  }
+  if (type === "exec" && "rootCommand" in d) {
+    return `Allow execution of: '${d.rootCommand}'?`;
+  }
+  if (type === "mcp" && "toolDisplayName" in d) {
+    return `Allow ${d.toolDisplayName}?`;
+  }
+  if (type === "info") {
+    return "Allow this fetch?";
+  }
+  return "Allow this action?";
+}
+
+export function transformEvent(event: ServerGeminiStreamEvent): AdapterEvent {
+  if (event.type === GeminiEventType.Content) {
+    return { type: "text_delta", text: event.value };
+  }
+  if (event.type === GeminiEventType.Thought) {
+    return { type: "thinking_delta", text: event.value.description };
+  }
+  if (event.type === GeminiEventType.ToolCallRequest) {
+    return {
+      type: "tool_pending",
+      id: event.value.callId,
+      name: event.value.name,
+      params: event.value.args
+    };
+  }
+  if (event.type === GeminiEventType.ToolCallResponse) {
+    const info = event.value;
+    return {
+      type: "tool_result",
+      id: info.callId,
+      success: !info.error,
+      output: getToolResultOutput(info),
+      errorMessage: info.error?.message
+    };
+  }
+  if (event.type === GeminiEventType.ToolCallConfirmation) {
+    const details = event.value;
+    // Extract correlationId from the details object
+    const correlationId = (details.details as { correlationId?: string }).correlationId ?? details.request.callId;
+    return {
+      type: "tool_confirmation",
+      id: details.request.callId,
+      name: details.request.name,
+      params: details.request.args,
+      confirmationType: getConfirmationType(details),
+      question: getConfirmationQuestion(details),
+      preview: getConfirmationPreview(details),
+      canAllowAlways: true, // Will be determined by trusted folder status in future
+      correlationId
+    };
+  }
+  if (event.type === GeminiEventType.UserCancelled) {
+    // This is a general cancellation, not tied to a specific tool
+    return { type: "complete" };
+  }
+  if (event.type === GeminiEventType.Finished) {
+    return { type: "complete" };
+  }
+  if (event.type === GeminiEventType.Error) {
+    return { type: "error", message: event.value.error.message };
+  }
+  logger.warn("Unhandled event type received", { eventType: event.type });
+  return { type: "unknown", raw: event };
+}
+
+export async function* transformStream(
+  stream: AsyncIterable<ServerGeminiStreamEvent>
+): AsyncGenerator<AdapterEvent> {
+  for await (const event of stream) {
+    yield transformEvent(event);
+  }
+}
+
+export async function* sendMessageWithSession(
+  session: ConfigSession,
+  prompt: string,
+  signal?: AbortSignal
+): AsyncGenerator<AdapterEvent> {
+  const client = session.getClient();
+  const promptId = `nui-prompt-${Date.now()}`;
+  const stream = client.sendMessageStream(prompt, signal, promptId);
+
+  for await (const event of stream) {
+    yield transformEvent(event);
+  }
+}
+
 
 const PROVIDER_ENTRIES: ProviderInfo[] = [
   { id: "openai", label: "OpenAI" },
@@ -81,275 +209,34 @@ export function listProviders(): ProviderInfo[] {
 }
 
 export async function listModels(session: SessionConfig): Promise<ModelInfo[]> {
-  const { runtime } = buildSessionContext(session);
-  withActiveRuntime(runtime);
-  const provider = buildProvider(session);
-  const models = await provider.getModels();
-  return models.map((model) => ({ id: model.id, name: model.name }));
+  // Model listing not currently implemented.
+  // ConfigSession doesn't expose getProvider() directly.
+  // Future implementation should use ConfigSession.config.getProviderManager()
+  logger.debug("listModels called but not implemented", { provider: session.provider });
+  return Promise.resolve([]);
 }
 
 export async function* sendMessage(
-  session: SessionConfig,
+  sessionConfig: SessionConfig,
   prompt: string,
   signal?: AbortSignal
 ): AsyncGenerator<AdapterEvent> {
-  const { settings, config, runtime } = buildSessionContext(session);
-  const authProvider = buildAuthTokenProvider(session, settings);
-  withActiveRuntime(runtime);
-  const provider = buildProvider(session);
-  if (isRuntimeAwareProvider(provider)) {
-    provider.setRuntimeSettingsService(settings);
-  }
-  const contents: IContent[] = [ContentFactory.createUserMessage(prompt)];
-  const iterator = startChatIterator(provider, {
-    session,
-    contents,
-    settings,
-    config,
-    runtime,
-    authProvider,
-    signal
+  const session = createConfigSession({
+    model: sessionConfig.model ?? "gemini-2.5-flash",
+    workingDir: process.cwd(),
+    provider: sessionConfig.provider,
+    baseUrl: sessionConfig.baseUrl,
+    authKeyfile: sessionConfig.keyFilePath,
+    apiKey: sessionConfig.apiKey,
   });
 
-  for await (const content of iterator) {
-    if (signal?.aborted === true) {
-      break;
-    }
-    yield* mapContentToEvents(content);
-  }
+  await session.initialize();
+
+  yield* sendMessageWithSession(session, prompt, signal);
 }
 
-function mapContentToEvents(content: IContent): AdapterEvent[] {
-  const events: AdapterEvent[] = [];
-  for (const block of content.blocks) {
-    if (ContentBlockGuards.isTextBlock(block)) {
-      events.push({ type: "text", lines: normalizeText(block.text) });
-    } else if (ContentBlockGuards.isThinkingBlock(block)) {
-      events.push({ type: "thinking", lines: normalizeText(block.thought) });
-    } else if (ContentBlockGuards.isToolCallBlock(block)) {
-      events.push({
-        type: "tool",
-        header: `[tool] ${block.name}`,
-        lines: formatToolCall(block)
-      });
-    }
-  }
-  return events;
-}
 
-function normalizeText(text: string): string[] {
-  return text.split(/\r?\n/).filter((line) => line.trim().length > 0);
-}
 
-function formatToolCall(block: Extract<ContentBlock, { type: "tool_call" }>): string[] {
-  const lines: string[] = [];
-  lines.push(`id: ${block.id}`);
-  lines.push(`params: ${formatParams(block.parameters)}`);
-  return lines;
-}
 
-function formatParams(params: unknown): string {
-  try {
-    return JSON.stringify(params);
-  } catch {
-    return String(params);
-  }
-}
 
-function resolveAuthToken(session: SessionConfig): string | undefined {
-  if (session.apiKey?.trim()) {
-    return session.apiKey.trim();
-  }
-  if (session.keyFilePath?.trim()) {
-    try {
-      const contents = readFileSync(session.keyFilePath, "utf8").trim();
-      return contents.length > 0 ? contents : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-}
 
-function buildAuthTokenProvider(session: SessionConfig, settings: SettingsService): { provide: () => Promise<string | undefined> } {
-  return {
-    provide: (): Promise<string | undefined> => {
-      const direct = resolveAuthToken(session);
-      if (direct) {
-        return Promise.resolve(direct);
-      }
-      const providerSettings = settings.getProviderSettings(session.provider) as Record<string, unknown> | undefined;
-      const fromProvider = (providerSettings?.["auth-key"] as string | undefined) ?? (providerSettings?.apiKey as string | undefined);
-      if (fromProvider?.trim()) {
-        return Promise.resolve(fromProvider.trim());
-      }
-      const globalKey = settings.get("auth-key") as string | undefined;
-      if (globalKey?.trim()) {
-        return Promise.resolve(globalKey.trim());
-      }
-      return Promise.resolve(undefined);
-    }
-  };
-}
-
-function buildProvider(session: SessionConfig): IProvider {
-  const authToken = resolveAuthToken(session);
-  const baseUrl = session.baseUrl;
-  if (session.provider === "gemini") {
-    return new GeminiProvider(authToken, baseUrl);
-  }
-  if (session.provider === "anthropic") {
-    return new AnthropicProvider(authToken, baseUrl);
-  }
-  return new OpenAIProvider(authToken, baseUrl);
-}
-
-function isRuntimeAwareProvider(
-  provider: IProvider
-): provider is IProvider & { setRuntimeSettingsService: (settings: SettingsService) => void } {
-  return typeof (provider as { setRuntimeSettingsService?: unknown }).setRuntimeSettingsService === "function";
-}
-
-function buildSessionContext(session: SessionConfig): {
-  settings: SettingsService;
-  config: Config;
-  runtime?: unknown;
-} {
-  const settings = acquireSettingsService();
-  settings.set("base-url", session.baseUrl ?? "");
-  settings.set("model", session.model ?? "");
-  settings.set("activeProvider", session.provider);
-  settings.setProviderSetting(session.provider, "baseUrl", session.baseUrl ?? "");
-  settings.setProviderSetting(session.provider, "model", session.model ?? "");
-  const authToken = resolveAuthToken(session);
-  if (authToken) {
-    settings.set("auth-key", authToken);
-    settings.setProviderSetting(session.provider, "auth-key", authToken);
-    settings.setProviderSetting(session.provider, "apiKey", authToken);
-  }
-  if (session.keyFilePath) {
-    settings.set("auth-keyfile", session.keyFilePath);
-    settings.setProviderSetting(session.provider, "auth-keyfile", session.keyFilePath);
-    settings.setProviderSetting(session.provider, "apiKeyfile", session.keyFilePath);
-  }
-
-  const config = createConfigStub(settings, session);
-  const runtime = maybeCreateProviderRuntimeContext
-    ? maybeCreateProviderRuntimeContext({
-        settingsService: settings,
-        config,
-        runtimeId: "nui-runtime",
-        metadata: { source: "nui-runtime-context" }
-      })
-    : undefined;
-
-  return { settings, config, runtime };
-}
-
-function createConfigStub(settings: SettingsService, session: SessionConfig): Config {
-  const noop = (): void => {
-    /* intentionally empty */
-  };
-
-  const configShape = {
-    getConversationLoggingEnabled: () => false,
-    setConversationLoggingEnabled: noop,
-    getTelemetryLogPromptsEnabled: () => false,
-    setTelemetryLogPromptsEnabled: noop,
-    getUsageStatisticsEnabled: () => false,
-    setUsageStatisticsEnabled: noop,
-    getDebugMode: () => false,
-    setDebugMode: noop,
-    getSessionId: () => "nui-session",
-    setSessionId: noop,
-    getFlashFallbackMode: () => "off",
-    setFlashFallbackMode: noop,
-    getProvider: () => session.provider,
-    setProvider: noop,
-    getSettingsService: () => settings,
-    getProviderSettings: (name: string) => (name === session.provider ? settings.getProviderSettings(name) : {}),
-    setProviderSettings: noop,
-    getProviderConfig: () => ({}),
-    setProviderConfig: noop,
-    resetProvider: noop,
-    resetProviderSettings: noop,
-    resetProviderConfig: noop,
-    getActiveWorkspace: () => undefined as string | undefined,
-    setActiveWorkspace: noop,
-    clearActiveWorkspace: noop,
-    getExtensionConfig: () => ({}),
-    setExtensionConfig: noop,
-    getFeatures: () => ({}),
-    setFeatures: noop,
-    getRedactionConfig: () => ({ replacements: [] }),
-    setProviderManager: noop,
-    getProviderManager: () => undefined,
-    getProviderSetting: () => undefined,
-    getEphemeralSettings: () => ({ model: session.model ?? "" }),
-    getEphemeralSetting: () => undefined,
-    setEphemeralSetting: noop,
-    getUserMemory: () => "",
-    setUserMemory: noop,
-    getModel: () => session.model ?? "",
-    setModel: noop,
-    getQuotaErrorOccurred: () => false,
-    setQuotaErrorOccurred: noop,
-    getContentGeneratorConfig: () => ({
-      authType: "api_key",
-      model: session.model ?? "",
-      provider: session.provider
-    })
-  } satisfies Partial<Config> & Record<string, unknown>;
-
-  const config = Object.assign({}, configShape) as Config;
-  Object.setPrototypeOf(config, Config.prototype);
-  return config;
-}
-
-function withActiveRuntime(runtime: unknown): void {
-  if (runtime !== undefined && typeof maybeSetActiveProviderRuntimeContext === "function") {
-    maybeSetActiveProviderRuntimeContext(runtime);
-  }
-}
-
-function acquireSettingsService(): SettingsService {
-  if (typeof maybeResetSettingsService === "function") {
-    maybeResetSettingsService();
-  }
-  const service = typeof maybeGetSettingsService === "function" ? maybeGetSettingsService() : new SettingsService();
-  if (typeof (service as { clear?: () => void }).clear === "function") {
-    (service as { clear: () => void }).clear();
-  }
-  return service;
-}
-
-function startChatIterator(
-  provider: IProvider,
-  options: {
-    session: SessionConfig;
-    contents: IContent[];
-    settings: SettingsService;
-    config: Config;
-    runtime?: unknown;
-    authProvider: { provide: () => Promise<string | undefined> };
-    signal?: AbortSignal;
-  }
-): AsyncIterableIterator<IContent> {
-  const generate = provider.generateChatCompletion.bind(provider) as unknown as (...args: unknown[]) => AsyncIterableIterator<IContent>;
-  if (generate.length > 1) {
-    return generate(options.contents, undefined, options.signal);
-  }
-  return generate({
-    contents: options.contents,
-    settings: options.settings,
-    config: options.config,
-    runtime: options.runtime,
-    resolved: {
-      model: options.session.model,
-      baseURL: options.session.baseUrl,
-      authToken: options.authProvider,
-      streaming: true
-    },
-    signal: options.signal
-  });
-}

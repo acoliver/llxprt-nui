@@ -6,7 +6,7 @@ import { useCompletionManager } from "./features/completion";
 import { usePromptHistory } from "./features/chat";
 import { useThemeManager } from "./features/theme";
 import type { ThemeDefinition } from "./features/theme";
-import type { SessionConfig } from "./features/config";
+import type { SessionConfig, ToolConfirmationEvent } from "./features/config";
 import { useChatStore } from "./hooks/useChatStore";
 import { useInputManager } from "./hooks/useInputManager";
 import { useScrollManagement } from "./hooks/useScrollManagement";
@@ -14,6 +14,8 @@ import { useStreamingLifecycle } from "./hooks/useStreamingLifecycle";
 import { useSelectionClipboard } from "./hooks/useSelectionClipboard";
 import { useAppCommands } from "./hooks/useAppCommands";
 import { useSuggestionSetup } from "./hooks/useSuggestionSetup";
+import { useSessionManager } from "./hooks/useSessionManager";
+import { useToolApproval, type PendingApproval } from "./hooks/useToolApproval";
 import {
   useEnterSubmit,
   useFocusAndMount,
@@ -24,6 +26,7 @@ import {
 import { ChatLayout } from "./ui/components/ChatLayout";
 import { buildStatusLabel } from "./ui/components/StatusBar";
 import { CommandComponents } from "./ui/components/CommandComponents";
+import { ToolApprovalModal } from "./ui/modals";
 import { Dialog, useDialog, Command, useCommand } from "./uicontext";
 
 const HEADER_TEXT = "LLxprt Code - I'm here to help";
@@ -35,20 +38,44 @@ function AppInner(): JSX.Element {
   const { themes, theme, setThemeBySlug } = useThemeManager();
   const renderer = useRenderer();
 
+  // Add session manager
+  const {
+    session,
+    createSession,
+  } = useSessionManager();
+
+  // Tool approval management
+  const { pendingApproval, queueApproval, handleDecision, clearApproval } = useToolApproval(session);
+
+  // Callback to queue tool confirmations for the approval modal
+  const handleConfirmationNeeded = useCallback((event: ToolConfirmationEvent) => {
+    const approval: PendingApproval = {
+      callId: event.id,
+      toolName: event.name,
+      confirmationType: event.confirmationType,
+      question: event.question,
+      preview: event.preview,
+      params: event.params,
+      canAllowAlways: event.canAllowAlways,
+      correlationId: event.correlationId
+    };
+    queueApproval(approval);
+  }, [queueApproval]);
+
   const dialog = useDialog();
   const { trigger: triggerCommand } = useCommand();
   const { suggestions, selectedIndex, refresh: refreshCompletion, clear: clearCompletion, moveSelection, applySelection } = useCompletionManager(textareaRef);
   const { record: recordHistory, handleHistoryKey } = usePromptHistory(textareaRef);
   const makeLineId = useLineIdGenerator();
-  const { entries, appendMessage, appendToMessage, appendToolBlock, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } = useChatStore(makeLineId);
-  const { mountedRef, cancelStreaming, startStreamingResponder } = useStreamingLifecycle(appendMessage, appendToMessage, appendToolBlock, setResponderWordCount, setStreamState);
+  const { entries, appendMessage, appendToMessage, appendToolCall, updateToolCall, promptCount, setPromptCount, responderWordCount, setResponderWordCount, streamState, setStreamState } = useChatStore(makeLineId);
+  const { mountedRef, cancelStreaming, startStreamingResponder } = useStreamingLifecycle(appendMessage, appendToMessage, appendToolCall, updateToolCall, setResponderWordCount, setStreamState, handleConfirmationNeeded);
 
   useFocusAndMount(textareaRef, mountedRef);
 
   const focusInput = useCallback(() => { textareaRef.current?.focus(); }, []);
   const handleThemeSelect = useCallback((theme: ThemeDefinition) => { setThemeBySlug(theme.slug); }, [setThemeBySlug]);
 
-  const { fetchModelItems, fetchProviderItems, applyTheme, handleConfigCommand } = useAppCommands({ sessionConfig, setSessionConfig, themes, setThemeBySlug, appendMessage });
+  const { fetchModelItems, fetchProviderItems, applyTheme, handleConfigCommand } = useAppCommands({ sessionConfig, setSessionConfig, themes, setThemeBySlug, appendMessage, createSession });
 
   useSuggestionSetup(themes);
 
@@ -68,7 +95,13 @@ function AppInner(): JSX.Element {
     return triggerCommand(command);
   }, [applyTheme, handleConfigCommand, triggerCommand]);
 
-  const { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete } = useInputManager(textareaRef, appendMessage, setPromptCount, setAutoFollow, (prompt) => startStreamingResponder(prompt, sessionConfig), refreshCompletion, clearCompletion, applySelection, handleCommand, recordHistory);
+  const { inputLineCount, enforceInputLineBounds, handleSubmit, handleTabComplete } = useInputManager(textareaRef, appendMessage, setPromptCount, setAutoFollow, (prompt) => {
+    if (!session) {
+      appendMessage("system", "No active session. Load a profile first with /profile load <name>");
+      return Promise.resolve();
+    }
+    return startStreamingResponder(prompt, session);
+  }, refreshCompletion, clearCompletion, applySelection, handleCommand, recordHistory);
 
   const statusLabel = useMemo(() => buildStatusLabel(streamState, autoFollow), [autoFollow, streamState]);
   const handleMouseUp = useSelectionClipboard(renderer);
@@ -77,6 +110,11 @@ function AppInner(): JSX.Element {
   useEnterSubmit(() => void handleSubmit(), dialog.isOpen);
   useSuggestionKeybindings(dialog.isOpen ? 0 : suggestions.length, moveSelection, handleTabComplete, cancelStreaming, () => { textareaRef.current?.clear(); enforceInputLineBounds(); return Promise.resolve(); }, () => streamState === "streaming");
   useHistoryNavigation(dialog.isOpen, suggestions.length, handleHistoryKey);
+
+  // Close handler for approval modal
+  const handleApprovalClose = useCallback(() => {
+    clearApproval();
+  }, [clearApproval]);
 
   return (
     <>
@@ -96,6 +134,14 @@ function AppInner(): JSX.Element {
         handleSubmit={handleSubmitWrapped} statusLabel={statusLabel} promptCount={promptCount}
         responderWordCount={responderWordCount} streamState={streamState} onScroll={handleMouseScroll}
         onMouseUp={handleMouseUp} suggestions={suggestions} selectedSuggestion={selectedIndex} theme={theme} />
+      {pendingApproval && (
+        <ToolApprovalModal
+          details={pendingApproval}
+          onDecision={handleDecision}
+          onClose={handleApprovalClose}
+          theme={theme}
+        />
+      )}
     </>
   );
 }

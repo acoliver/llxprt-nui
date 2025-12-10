@@ -2,11 +2,16 @@ import os from "node:os";
 import path from "node:path";
 import { ProfileManager } from "@vybestack/llxprt-code-core";
 import type { ProviderKey, SessionConfig } from "./llxprtAdapter";
+import type { ConfigSessionOptions } from "./configSession";
 
 export interface ConfigCommandResult {
   readonly handled: boolean;
   readonly nextConfig: SessionConfig;
   readonly messages: string[];
+}
+
+export interface ConfigCommandResultWithSession extends ConfigCommandResult {
+  readonly sessionOptions?: ConfigSessionOptions;
 }
 
 interface ApplyOptions {
@@ -156,7 +161,7 @@ function parseProfileArgs(args: string[]): ProfileArgResult {
   return { action, name };
 }
 
-interface ProfileData {
+export interface ProfileData {
   readonly provider?: string;
   readonly baseUrl?: string;
   readonly model?: string;
@@ -175,7 +180,8 @@ function mapProfileToSessionConfig(profile: ProfileData): Partial<SessionConfig>
     return null;
   }
 
-  return { provider, baseUrl, keyFilePath, model, apiKey: undefined };
+  // Pass through all ephemeral settings to the session config
+  return { provider, baseUrl, keyFilePath, model, apiKey: undefined, ephemeralSettings: ephemeral };
 }
 
 function validateProfileConfig(config: Partial<SessionConfig> | null, profileName: string): string | null {
@@ -250,4 +256,71 @@ export async function listAvailableProfiles(options?: ApplyOptions): Promise<str
   } catch {
     return [];
   }
+}
+
+export function profileToConfigOptions(
+  profile: ProfileData,
+  workingDir: string
+): ConfigSessionOptions {
+  const ephemeral = profile.ephemeralSettings ?? {};
+
+  return {
+    model: ((ephemeral.model ?? profile.model) as string) || "gemini-2.5-flash",
+    provider: profile.provider,
+    workingDir,
+    baseUrl: (ephemeral["base-url"] ?? ephemeral.baseUrl ?? profile.baseUrl) as
+      | string
+      | undefined,
+    authKeyfile: (ephemeral["auth-keyfile"] ??
+      ephemeral.authKeyfile ??
+      profile.authKeyfile) as string | undefined,
+    apiKey: ephemeral["auth-key"] as string | undefined,
+  };
+}
+
+interface ApplyWithSessionOptions extends ApplyOptions {
+  readonly workingDir: string;
+}
+
+export async function applyProfileWithSession(
+  rawInput: string,
+  current: SessionConfig,
+  options: ApplyWithSessionOptions
+): Promise<ConfigCommandResultWithSession> {
+  const result = await applyConfigCommand(rawInput, current, options);
+
+  // Check if this was a profile load command
+  const trimmed = rawInput.trim();
+  if (!trimmed.startsWith("/")) {
+    return { ...result, sessionOptions: undefined };
+  }
+
+  const body = trimmed.slice(1).trim();
+  const tokens = body.split(/\s+/).filter((token) => token.length > 0);
+  const [rawCommand] = tokens;
+  const command = rawCommand?.toLowerCase();
+
+  // Only generate session options for profile commands
+  if (command !== "profile") {
+    return { ...result, sessionOptions: undefined };
+  }
+
+  // If profile load failed or config is incomplete, don't return options
+  if (!result.handled || !result.nextConfig.model || !result.nextConfig.baseUrl) {
+    return { ...result, sessionOptions: undefined };
+  }
+
+  // Convert the new config to session options
+  const sessionOptions = profileToConfigOptions(
+    {
+      provider: result.nextConfig.provider,
+      model: result.nextConfig.model,
+      baseUrl: result.nextConfig.baseUrl,
+      authKeyfile: result.nextConfig.keyFilePath,
+      ephemeralSettings: result.nextConfig.ephemeralSettings,
+    },
+    options.workingDir
+  );
+
+  return { ...result, sessionOptions };
 }

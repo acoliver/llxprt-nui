@@ -26,6 +26,7 @@ function renderSuggestionRow(
       key={`suggestion-${globalIndex}`}
       bg={isSelected ? theme.colors.accent.primary : undefined}
       fg={isSelected ? theme.colors.selection.fg : theme.colors.text.primary}
+      style={{ paddingLeft: 1, paddingRight: 1 }}
     >
       {rowText}
     </text>
@@ -55,17 +56,20 @@ export function SuggestionPanel(props: SuggestionPanelProps): JSX.Element | null
         height,
         minHeight: height,
         maxHeight: height,
-        paddingLeft: 1,
-        paddingRight: 1,
+        paddingLeft: 0,
+        paddingRight: 0,
         paddingTop: 0,
         paddingBottom: 0,
-        flexDirection: "column"
+        flexDirection: "column",
+        backgroundColor: props.theme.colors.panel.bg,
+        marginTop: 0,
+        marginBottom: 1
       }}
     >
       {pageItems.map((item, index) =>
         renderSuggestionRow(item, pageStart + index, props.selectedIndex, maxLabel, props.theme)
       )}
-      {indicatorNeeded ? <text fg={props.theme.colors.text.muted}>{`▼ page ${pageIndex + 1}/${totalPages} ▲`}</text> : null}
+      {indicatorNeeded ? <text fg={props.theme.colors.text.muted} style={{ paddingLeft: 1 }}>{`▼ page ${pageIndex + 1}/${totalPages} ▲`}</text> : null}
     </box>
   );
 }

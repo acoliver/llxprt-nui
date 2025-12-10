@@ -1,6 +1,8 @@
 import type { RefObject } from "react";
 import { useCallback, useRef } from "react";
-import type { SessionConfig } from "../features/config";
+import type { ConfigSession } from "../features/config/configSession";
+import type { ToolConfirmationEvent } from "../features/config";
+import type { ToolCall } from "./useChatStore";
 import { useStreamingResponder } from "./useStreamingResponder";
 
 interface UseStreamingLifecycleResult {
@@ -8,15 +10,17 @@ interface UseStreamingLifecycleResult {
   mountedRef: RefObject<boolean>;
   abortRef: RefObject<AbortController | null>;
   cancelStreaming: () => void;
-  startStreamingResponder: (prompt: string, config: SessionConfig) => Promise<void>;
+  startStreamingResponder: (prompt: string, session: ConfigSession | null) => Promise<void>;
 }
 
 export function useStreamingLifecycle(
   appendMessage: (role: "user" | "model" | "thinking" | "system", text: string) => string,
   appendToMessage: (id: string, text: string) => void,
-  appendToolBlock: (tool: { lines: string[]; isBatch: boolean; scrollable?: boolean; maxHeight?: number; streaming?: boolean }) => string,
+  appendToolCall: (callId: string, name: string, params: Record<string, unknown>) => string,
+  updateToolCall: (callId: string, update: Partial<Omit<ToolCall, "id" | "kind" | "callId">>) => void,
   setResponderWordCount: (count: number) => void,
-  setStreamState: (state: "idle" | "streaming") => void
+  setStreamState: (state: "idle" | "streaming") => void,
+  onConfirmationNeeded?: (event: ToolConfirmationEvent) => void
 ): UseStreamingLifecycleResult {
   const streamRunId = useRef(0);
   const mountedRef = useRef(true);
@@ -25,12 +29,14 @@ export function useStreamingLifecycle(
   const startStreamingResponder = useStreamingResponder(
     appendMessage,
     appendToMessage,
-    appendToolBlock,
+    appendToolCall,
+    updateToolCall,
     setResponderWordCount,
     setStreamState,
     streamRunId,
     mountedRef,
-    abortRef
+    abortRef,
+    onConfirmationNeeded
   );
 
   const cancelStreaming = useCallback(() => {

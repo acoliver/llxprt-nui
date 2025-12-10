@@ -3,6 +3,12 @@ export { SearchSelectModal, type SearchSelectProps } from "./SearchSelectModal";
 export { AuthModal, type AuthOption } from "./AuthModal";
 export { ThemeModal } from "./ThemeModal";
 export { filterItems, type SearchItem } from "./types";
+export {
+  ToolApprovalModal,
+  type ToolApprovalModalProps,
+  type ToolApprovalDetails,
+  type ToolApprovalOutcome,
+} from "./ToolApprovalModal";
 
 // Default auth options used by the auth dialog
 import type { AuthOption } from "./AuthModal";

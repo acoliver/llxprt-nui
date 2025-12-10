@@ -48,7 +48,8 @@ function selectInitialTheme(themes: ThemeDefinition[]): ThemeDefinition {
         accent: { primary: "#38bdf8", secondary: "#a78bfa", warning: "#facc15", error: "#ef4444", success: "#22c55e" },
         selection: { fg: "#0f172a", bg: "#38bdf8" },
         diff: { addedBg: "#166534", addedFg: "#e5e7eb", removedBg: "#7f1d1d", removedFg: "#e5e7eb" },
-        scrollbar: { thumb: "#38bdf8", track: "#475569" }
+        scrollbar: { thumb: "#38bdf8", track: "#475569" },
+        message: { userBorder: "#7dd3fc", systemBorder: "#facc15", systemText: "#facc15", systemBg: "#0f172a" }
       }
     };
   }

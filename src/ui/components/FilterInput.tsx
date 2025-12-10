@@ -13,7 +13,11 @@ export interface FilterInputProps {
 export function FilterInput(props: FilterInputProps): JSX.Element {
   const placeholderText = useMemo(() => {
     const base = stringToStyledText(props.placeholder);
-    const fg = parseColor(props.theme?.colors.input.placeholder ?? props.theme?.colors.text.muted ?? "#888888");
+    const fg = parseColor(
+      props.theme?.colors.input.placeholder ?? 
+      props.theme?.colors.text.muted ?? 
+      "#888888"
+    );
     return { ...base, chunks: base.chunks.map((chunk) => ({ ...chunk, fg })) };
   }, [props.placeholder, props.theme?.colors.input.placeholder, props.theme?.colors.text.muted]);
 
@@ -44,13 +48,15 @@ export function FilterInput(props: FilterInputProps): JSX.Element {
         width: "90%",
         minHeight: 1,
         maxHeight: 1,
-        paddingLeft: 0,
-        paddingRight: 0,
+        paddingLeft: 1,
+        paddingRight: 1,
         paddingTop: 0,
         paddingBottom: 0,
         fg: props.theme?.colors.input.fg,
         bg: props.theme?.colors.input.bg,
-        borderColor: props.theme?.colors.input.border
+        borderColor: props.theme?.colors.panel.border ?? props.theme?.colors.input.border,
+        border: true,
+        borderRadius: 0
       }}
       textColor={props.theme?.colors.input.fg}
       focusedTextColor={props.theme?.colors.input.fg}
