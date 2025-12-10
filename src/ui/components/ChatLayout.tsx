@@ -165,15 +165,8 @@ export function renderToolCall(tool: ToolCall, theme: ThemeDefinition): JSX.Elem
     outputLines.push(`Error: ${tool.errorMessage}`);
   }
 
-  // Determine border color based on status
-  let borderColor = theme.colors.panel.border;
-  if (tool.status === "confirming") {
-    borderColor = theme.colors.accent.warning ?? theme.colors.panel.border;
-  } else if (tool.status === "error") {
-    borderColor = theme.colors.accent.error ?? theme.colors.panel.border;
-  } else if (tool.status === "complete") {
-    borderColor = theme.colors.accent.success ?? theme.colors.panel.border;
-  }
+  // Border always uses panel.border color
+  const borderColor = theme.colors.panel.border;
 
   // Output needs scrollbox if it exceeds max height
   const outputNeedsScroll = outputLines.length > TOOL_OUTPUT_MAX_HEIGHT;
@@ -198,10 +191,10 @@ export function renderToolCall(tool: ToolCall, theme: ThemeDefinition): JSX.Elem
         overflow: "hidden"
       }}
     >
-      {/* Header: status symbol + tool name */}
+      {/* Header: status symbol + tool name - both use status color */}
       <box key={`${tool.id}-header`} flexDirection="row" style={{ gap: 0 }}>
         <text fg={color}>{symbol}</text>
-        <text fg={theme.colors.text.tool}> {tool.name}</text>
+        <text fg={color}> {tool.name}</text>
       </box>
 
       {/* Parameters */}
@@ -352,6 +345,12 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
         backgroundColor: props.theme.colors.panel.bg
       }}
       contentOptions={{ paddingLeft: 2, paddingRight: 2 }}
+      verticalScrollbarOptions={{
+        trackOptions: {
+          backgroundColor: props.theme.colors.scrollbar?.track,
+          foregroundColor: props.theme.colors.scrollbar?.thumb
+        }
+      }}
       scrollX={false}
       stickyScroll={props.autoFollow}
       stickyStart="bottom"

@@ -16,7 +16,7 @@
       "user": "#6a9955",
       "responder": "#6a9955",
       "thinking": "#6a9955",
-      "tool": "#00ff00"
+      "tool": "#6a9955"
     },
     "input": {
       "bg": "#000000",
@@ -25,7 +25,7 @@
       "border": "#6a9955"
     },
     "status": {
-      "fg": "#00ff00",
+      "fg": "#6a9955",
       "muted": "#6a9955"
     },
     "accent": {

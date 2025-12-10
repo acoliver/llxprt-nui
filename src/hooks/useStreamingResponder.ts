@@ -43,7 +43,11 @@ function handleAdapterEvent(
 ): StreamContext {
   if (event.type === "text_delta") {
     const text = event.text;
+    // Skip empty or whitespace-only text when starting a new message
     if (context.modelMessageId === null) {
+      if (text.trim() === "") {
+        return context;
+      }
       const id = appendMessage("model", text);
       setResponderWordCount((count) => count + countWords(text));
       return { ...context, modelMessageId: id };
@@ -54,7 +58,11 @@ function handleAdapterEvent(
   }
   if (event.type === "thinking_delta") {
     const text = event.text;
+    // Skip empty or whitespace-only text when starting a new message
     if (context.thinkingMessageId === null) {
+      if (text.trim() === "") {
+        return context;
+      }
       const id = appendMessage("thinking", text);
       setResponderWordCount((count) => count + countWords(text));
       return { ...context, thinkingMessageId: id };
